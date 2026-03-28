@@ -18,7 +18,7 @@ export type Time = bigint;
 export interface Song {
     id: bigint;
     title: string;
-    genre: string;
+    coverBlobReference?: ExternalBlob;
     uploader: Principal;
     artist: string;
     blobReference: ExternalBlob;
@@ -40,15 +40,17 @@ export interface backendInterface {
     getCallerUserRole(): Promise<UserRole>;
     getSongById(songId: bigint): Promise<Song>;
     getSongsByArtist(artistName: string): Promise<Array<Song>>;
-    getSongsByGenre(genre: string): Promise<Array<Song>>;
     getSongsByUser(user: Principal): Promise<Array<Song>>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     isCallerAdmin(): Promise<boolean>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     searchSongs(searchText: string): Promise<Array<Song>>;
+    updateSong(songId: bigint, metadata: {
+        title: string;
+        artist: string;
+    }): Promise<void>;
     uploadSong(metadata: {
         title: string;
-        genre: string;
         artist: string;
-    }, blobReference: ExternalBlob): Promise<bigint>;
+    }, blobReference: ExternalBlob, coverBlobReference: ExternalBlob | null): Promise<bigint>;
 }

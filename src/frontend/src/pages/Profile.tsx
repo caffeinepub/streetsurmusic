@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Camera,
+  ChevronDown,
+  ChevronRight,
   Edit2,
   ListMusic,
   Loader2,
@@ -21,6 +23,7 @@ import {
   Trash2,
   User,
   Users,
+  X,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useRef, useState } from "react";
@@ -33,6 +36,7 @@ import type { LocalPlaylist } from "../hooks/useLocalProfile";
 import { useLocalProfile } from "../hooks/useLocalProfile";
 import {
   useDeleteSong,
+  useGetAllSongs,
   useGetCallerProfile,
   useGetSongsByUser,
   useSaveCallerProfile,
@@ -45,6 +49,7 @@ export function Profile() {
 
   const { data: profile } = useGetCallerProfile();
   const { data: songs = [], isLoading } = useGetSongsByUser(principal);
+  const { data: allSongs = [] } = useGetAllSongs();
   const { playSong, currentSong, isPlaying } = usePlayer();
   const { mutateAsync: deleteSong, isPending: isDeleting } = useDeleteSong();
   const { mutateAsync: saveProfile, isPending: isSaving } =
@@ -58,23 +63,24 @@ export function Profile() {
     addPlaylist,
     editPlaylist,
     deletePlaylist,
+    removeSongFromPlaylist,
   } = useLocalProfile();
 
   const { followedArtists } = useFollowedArtists();
 
-  // Edit profile dialog
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editBio, setEditBio] = useState("");
   const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
-  // Playlist dialogs
   const [playlistDialogOpen, setPlaylistDialogOpen] = useState(false);
   const [editingPlaylist, setEditingPlaylist] = useState<LocalPlaylist | null>(
     null,
   );
   const [plName, setPlName] = useState("");
+
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   if (!isLoggedIn) {
     return (
@@ -180,6 +186,21 @@ export function Profile() {
     deletePlaylist(id);
     toast.success("Playlist deleted");
   };
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Map song id -> song for lookup
+  const songMap = new Map<string, Song>();
+  for (const s of allSongs) {
+    songMap.set(s.id.toString(), s);
+  }
 
   return (
     <div className="space-y-8" data-ocid="profile.section">
@@ -383,46 +404,119 @@ export function Profile() {
             <p className="text-sm">No playlists yet. Create your first one!</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {localProfile.playlists.map((pl, i) => (
-              <motion.div
-                key={pl.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: i * 0.05 }}
-                data-ocid={`profile.item.${i + 1}`}
-                className="p-4 bg-card border border-border rounded-xl hover:border-primary/40 hover:bg-primary/5 transition-all group"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate">{pl.name}</p>
-                    <p className="text-xs text-primary font-medium mt-1">
-                      {pl.songs.length} songs
-                    </p>
-                  </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="w-7 h-7 hover:bg-primary/20 hover:text-primary"
-                      onClick={() => openEditPlaylist(pl)}
-                      data-ocid={`profile.edit_button.${i + 1}`}
+          <div className="flex flex-col gap-3">
+            {localProfile.playlists.map((pl, i) => {
+              const isExpanded = expandedIds.has(pl.id);
+              return (
+                <motion.div
+                  key={pl.id}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: i * 0.05 }}
+                  data-ocid={`profile.item.${i + 1}`}
+                  className="bg-card border border-border rounded-xl hover:border-primary/30 transition-all"
+                >
+                  {/* Playlist header */}
+                  <div className="flex items-center p-4 gap-2">
+                    <button
+                      type="button"
+                      className="flex-1 flex items-center gap-2 text-left min-w-0"
+                      onClick={() => toggleExpand(pl.id)}
                     >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="w-7 h-7 hover:bg-destructive/20 hover:text-destructive"
-                      onClick={() => handleDeletePlaylist(pl.id)}
-                      data-ocid={`profile.delete_button.${i + 1}`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm truncate">
+                          {pl.name}
+                        </p>
+                        <p className="text-xs text-primary font-medium mt-0.5">
+                          {pl.songs.length} songs
+                        </p>
+                      </div>
+                    </button>
+                    <div className="flex gap-1 shrink-0">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="w-7 h-7 hover:bg-primary/20 hover:text-primary"
+                        onClick={() => openEditPlaylist(pl)}
+                        data-ocid={`profile.edit_button.${i + 1}`}
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="w-7 h-7 hover:bg-destructive/20 hover:text-destructive"
+                        onClick={() => handleDeletePlaylist(pl.id)}
+                        data-ocid={`profile.delete_button.${i + 1}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            ))}
+
+                  {/* Expanded songs list */}
+                  {isExpanded && (
+                    <div className="border-t border-border px-4 pb-3">
+                      {pl.songs.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-3 text-center">
+                          No songs yet. Add from any song card.
+                        </p>
+                      ) : (
+                        <ul className="space-y-1 pt-2">
+                          {pl.songs.map((songId, si) => {
+                            const matched = songMap.get(songId);
+                            return (
+                              <li
+                                key={songId}
+                                className="flex items-center gap-2 py-1.5 px-2 rounded-md hover:bg-secondary group/song"
+                                data-ocid={`profile.row.${si + 1}`}
+                              >
+                                <div className="w-7 h-7 rounded overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20 flex-shrink-0 flex items-center justify-center">
+                                  {matched?.coverBlobReference ? (
+                                    <img
+                                      src={matched.coverBlobReference.getDirectURL()}
+                                      alt={matched.title}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <Music className="w-3.5 h-3.5 text-primary/60" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium truncate">
+                                    {matched?.title ?? songId}
+                                  </p>
+                                  {matched?.artist && (
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {matched.artist}
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    removeSongFromPlaylist(pl.id, songId)
+                                  }
+                                  data-ocid={`profile.delete_button.${si + 1}`}
+                                  className="w-6 h-6 flex items-center justify-center rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 opacity-0 group-hover/song:opacity-100 transition-opacity"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })}
           </div>
         )}
       </motion.div>
@@ -512,9 +606,17 @@ export function Profile() {
                 <button
                   type="button"
                   onClick={() => playSong(song)}
-                  className="w-10 h-10 rounded bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center flex-shrink-0 hover:from-primary/40 hover:to-accent/40 transition-colors"
+                  className="w-10 h-10 rounded overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20 flex-shrink-0 flex items-center justify-center hover:opacity-80 transition-opacity"
                 >
-                  <Music className="w-4 h-4 text-primary" />
+                  {song.coverBlobReference ? (
+                    <img
+                      src={song.coverBlobReference.getDirectURL()}
+                      alt={song.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <Music className="w-4 h-4 text-primary" />
+                  )}
                 </button>
                 <div className="flex-1 min-w-0">
                   <p

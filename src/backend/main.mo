@@ -2,17 +2,18 @@ import Map "mo:core/Map";
 import Nat "mo:core/Nat";
 import Iter "mo:core/Iter";
 import Principal "mo:core/Principal";
+import Time "mo:core/Time";
 import Order "mo:core/Order";
 import Array "mo:core/Array";
 import Runtime "mo:core/Runtime";
-import Time "mo:core/Time";
 import MixinStorage "blob-storage/Mixin";
 import Storage "blob-storage/Storage";
 
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
+import Migration "migration";
 
-
+(with migration = Migration.run)
 actor {
   include MixinStorage();
 
@@ -26,9 +27,9 @@ actor {
     id : Nat;
     title : Text;
     artist : Text;
-    genre : Text;
     uploader : Principal;
     blobReference : Storage.ExternalBlob;
+    coverBlobReference : ?Storage.ExternalBlob;
     uploadedAt : Time.Time;
   };
 
@@ -47,15 +48,15 @@ actor {
 
   // User profile management functions
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (caller.isAnonymous()) {
-      Runtime.trap("Unauthorized: Must be logged in");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can view profiles");
     };
     userProfiles.get(caller);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (caller.isAnonymous()) {
-      Runtime.trap("Unauthorized: Must be logged in");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can save profiles");
     };
     userProfiles.add(caller, profile);
   };
@@ -68,9 +69,9 @@ actor {
   };
 
   // Song management functions
-  public shared ({ caller }) func uploadSong(metadata : { title : Text; artist : Text; genre : Text }, blobReference : Storage.ExternalBlob) : async Nat {
-    if (caller.isAnonymous()) {
-      Runtime.trap("Unauthorized: Must be logged in to upload songs");
+  public shared ({ caller }) func uploadSong(metadata : { title : Text; artist : Text }, blobReference : Storage.ExternalBlob, coverBlobReference : ?Storage.ExternalBlob) : async Nat {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can upload songs");
     };
     let songId = nextSongId;
     nextSongId += 1;
@@ -78,13 +79,42 @@ actor {
       id = songId;
       title = metadata.title;
       artist = metadata.artist;
-      genre = metadata.genre;
       uploader = caller;
       blobReference;
+      coverBlobReference;
       uploadedAt = Time.now();
     };
     songs.add(songId, song);
     songId;
+  };
+
+  public shared ({ caller }) func updateSong(songId : Nat, metadata : { title : Text; artist : Text }) : async () {
+    switch (songs.get(songId)) {
+      case (null) { Runtime.trap("Song does not exist") };
+      case (?song) {
+        if (song.uploader != caller and not (AccessControl.isAdmin(accessControlState, caller))) {
+          Runtime.trap("Only the uploader or an admin can update this song");
+        };
+        let updatedSong : Song = {
+          song with
+          title = metadata.title;
+          artist = metadata.artist;
+        };
+        songs.add(songId, updatedSong);
+      };
+    };
+  };
+
+  public shared ({ caller }) func deleteSong(songId : Nat) : async () {
+    switch (songs.get(songId)) {
+      case (null) { Runtime.trap("Song does not exist") };
+      case (?song) {
+        if (song.uploader != caller and not (AccessControl.isAdmin(accessControlState, caller))) {
+          Runtime.trap("Only the uploader or an admin can delete this song");
+        };
+        songs.remove(songId);
+      };
+    };
   };
 
   public query func getAllSongs() : async [Song] {
@@ -107,14 +137,6 @@ actor {
     ).sort();
   };
 
-  public query func getSongsByGenre(genre : Text) : async [Song] {
-    songs.values().toArray().filter(
-      func(song) {
-        song.genre == genre;
-      }
-    ).sort();
-  };
-
   public query func searchSongs(searchText : Text) : async [Song] {
     songs.values().toArray().filter(
       func(song) {
@@ -127,18 +149,6 @@ actor {
     switch (songs.get(songId)) {
       case (null) { Runtime.trap("Song does not exist") };
       case (?song) { song };
-    };
-  };
-
-  public shared ({ caller }) func deleteSong(songId : Nat) : async () {
-    switch (songs.get(songId)) {
-      case (null) { Runtime.trap("Song does not exist") };
-      case (?song) {
-        if (song.uploader != caller and not (AccessControl.isAdmin(accessControlState, caller))) {
-          Runtime.trap("Only the uploader or an admin can delete this song");
-        };
-        songs.remove(songId);
-      };
     };
   };
 };

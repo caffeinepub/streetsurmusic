@@ -3,11 +3,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   CheckCircle,
+  Image,
   Loader2,
   Lock,
   Music,
   ShieldCheck,
   Upload as UploadIcon,
+  X,
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -47,10 +49,13 @@ export function Upload() {
   const [genre, setGenre] = useState("Pop");
   const [autoDetected, setAutoDetected] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const {
     mutateAsync: uploadSong,
     isPending,
@@ -76,6 +81,17 @@ export function Upload() {
       setFile(f);
     } else {
       toast.error("Please select an audio file (MP3, WAV, etc.)");
+    }
+  };
+
+  const handleCoverFile = (f: File) => {
+    if (f.type.startsWith("image/")) {
+      setCoverFile(f);
+      const reader = new FileReader();
+      reader.onload = (ev) => setCoverPreview(ev.target?.result as string);
+      reader.readAsDataURL(f);
+    } else {
+      toast.error("Please select an image file");
     }
   };
 
@@ -117,6 +133,7 @@ export function Upload() {
         artist: artist.trim(),
         genre,
         file,
+        coverFile: coverFile ?? undefined,
         onProgress: setUploadProgress,
       });
       toast.success("Song uploaded successfully!");
@@ -125,6 +142,8 @@ export function Upload() {
       setGenre("Pop");
       setAutoDetected(false);
       setFile(null);
+      setCoverFile(null);
+      setCoverPreview(null);
       setUploadProgress(0);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -143,10 +162,11 @@ export function Upload() {
     setGenre("Pop");
     setAutoDetected(false);
     setFile(null);
+    setCoverFile(null);
+    setCoverPreview(null);
     setUploadProgress(0);
   };
 
-  // Owner already claimed by someone else
   if (ownerExists && !isOwner) {
     return (
       <div
@@ -162,7 +182,6 @@ export function Upload() {
     );
   }
 
-  // No owner claimed yet -- show claim button
   if (!ownerExists) {
     return (
       <motion.div
@@ -227,6 +246,7 @@ export function Upload() {
         <UploadIcon className="w-5 h-5 text-primary" />
         <h2 className="text-xl font-bold">Upload a Track</h2>
       </div>
+
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="song-title">Song Title</Label>
@@ -239,6 +259,7 @@ export function Upload() {
             className="bg-card border-border focus:border-primary/50"
           />
         </div>
+
         <div className="space-y-2">
           <Label htmlFor="artist-name">Artist Name</Label>
           <Input
@@ -250,6 +271,68 @@ export function Upload() {
             className="bg-card border-border focus:border-primary/50"
           />
         </div>
+
+        {/* Cover Photo */}
+        <div className="space-y-2">
+          <Label>
+            Cover Photo{" "}
+            <span className="text-muted-foreground text-xs">(Optional)</span>
+          </Label>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              data-ocid="upload.upload_button"
+              onClick={() => coverInputRef.current?.click()}
+              className="w-20 h-20 rounded-lg border-2 border-dashed border-border hover:border-primary/50 overflow-hidden flex items-center justify-center bg-card transition-colors flex-shrink-0"
+            >
+              {coverPreview ? (
+                <img
+                  src={coverPreview}
+                  alt="Cover"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <Image className="w-7 h-7 text-muted-foreground" />
+              )}
+            </button>
+            <div className="flex-1">
+              {coverFile ? (
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-foreground truncate flex-1">
+                    {coverFile.name}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCoverFile(null);
+                      setCoverPreview(null);
+                    }}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Click the box to add album art
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                JPG, PNG, WEBP accepted
+              </p>
+            </div>
+          </div>
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) =>
+              e.target.files?.[0] && handleCoverFile(e.target.files[0])
+            }
+          />
+        </div>
+
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Label htmlFor="song-genre">Genre</Label>
@@ -273,6 +356,8 @@ export function Upload() {
             ))}
           </select>
         </div>
+
+        {/* Audio Dropzone */}
         <div className="space-y-2">
           <Label>Audio File</Label>
           <label
@@ -325,6 +410,7 @@ export function Upload() {
             )}
           </label>
         </div>
+
         {isPending && uploadProgress > 0 && (
           <div className="space-y-1" data-ocid="upload.loading_state">
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -339,6 +425,7 @@ export function Upload() {
             </div>
           </div>
         )}
+
         <Button
           type="submit"
           disabled={isPending || !title || !artist || !file}

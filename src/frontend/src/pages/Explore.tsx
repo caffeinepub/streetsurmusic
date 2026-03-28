@@ -1,3 +1,13 @@
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -5,13 +15,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Compass, Filter } from "lucide-react";
+import { Compass, Filter, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import type { Song } from "../backend";
 import { SongCard } from "../components/SongCard";
 import { usePlayer } from "../context/PlayerContext";
 import { SAMPLE_SONGS } from "../data/sampleSongs";
-import { useGetAllSongs } from "../hooks/useQueries";
+import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useOwner } from "../hooks/useOwner";
+import {
+  useDeleteSong,
+  useGetAllSongs,
+  useUpdateSong,
+} from "../hooks/useQueries";
 
 export const GENRES = [
   "Pop",
@@ -33,10 +50,48 @@ export function Explore() {
   const { data: songs = [], isLoading } = useGetAllSongs();
   const { playSongFromList, playStaticSongFromList, currentSong, isPlaying } =
     usePlayer();
+  const { identity } = useInternetIdentity();
+  const { isOwner } = useOwner(identity?.getPrincipal().toString());
+  const { mutateAsync: deleteSong } = useDeleteSong();
+  const { mutateAsync: updateSong, isPending: isUpdating } = useUpdateSong();
   const hasRealSongs = songs.length > 0;
 
   const [selectedGenre, setSelectedGenre] = useState<string>("all");
   const [selectedYear, setSelectedYear] = useState<string>("all");
+
+  const [editSong, setEditSong] = useState<Song | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editArtist, setEditArtist] = useState("");
+
+  const openEdit = (song: Song) => {
+    setEditSong(song);
+    setEditTitle(song.title);
+    setEditArtist(song.artist);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editSong) return;
+    try {
+      await updateSong({
+        songId: editSong.id,
+        title: editTitle,
+        artist: editArtist,
+      });
+      toast.success("Song updated");
+      setEditSong(null);
+    } catch {
+      toast.error("Failed to update song");
+    }
+  };
+
+  const handleDelete = async (songId: bigint) => {
+    try {
+      await deleteSong(songId);
+      toast.success("Song deleted");
+    } catch {
+      toast.error("Failed to delete song");
+    }
+  };
 
   const filteredSamples = SAMPLE_SONGS.filter((s) => {
     const genreMatch = selectedGenre === "all" || s.genre === selectedGenre;
@@ -45,9 +100,10 @@ export function Explore() {
   });
 
   const filteredReal = (songs as Song[]).filter((song) => {
+    const songGenre = (song as any).genre ?? "";
     const genreMatch =
       selectedGenre === "all" ||
-      song.genre.toLowerCase() === selectedGenre.toLowerCase();
+      songGenre.toLowerCase() === selectedGenre.toLowerCase();
     if (!genreMatch) return false;
     if (selectedYear === "all") return true;
     const year = new Date(Number(song.uploadedAt / BigInt(1e6))).getFullYear();
@@ -154,6 +210,9 @@ export function Explore() {
               isPlaying={isPlaying && currentSong?.id === song.id}
               onPlay={() => playSongFromList(filteredReal, i)}
               index={i}
+              isOwner={isOwner}
+              onDelete={handleDelete}
+              onEdit={openEdit}
             />
           ))}
         </div>
@@ -169,6 +228,63 @@ export function Explore() {
           ))}
         </div>
       )}
+
+      {/* Edit Song Dialog */}
+      <Dialog
+        open={!!editSong}
+        onOpenChange={(open) => !open && setEditSong(null)}
+      >
+        <DialogContent
+          className="bg-card border-border max-w-sm"
+          data-ocid="song.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>Edit Song</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-title-ex">Song Title</Label>
+              <Input
+                id="edit-title-ex"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="bg-background border-border"
+                data-ocid="song.input"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-artist-ex">Artist Name</Label>
+              <Input
+                id="edit-artist-ex"
+                value={editArtist}
+                onChange={(e) => setEditArtist(e.target.value)}
+                className="bg-background border-border"
+                data-ocid="song.input"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setEditSong(null)}
+              data-ocid="song.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={isUpdating}
+              className="bg-primary hover:bg-primary/90"
+              data-ocid="song.save_button"
+            >
+              {isUpdating ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : null}
+              {isUpdating ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

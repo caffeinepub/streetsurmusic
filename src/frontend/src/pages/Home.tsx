@@ -1,16 +1,38 @@
-import { Play, TrendingUp } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2, Play, TrendingUp } from "lucide-react";
 import { motion } from "motion/react";
+import { useState } from "react";
+import { toast } from "sonner";
 import type { Song } from "../backend";
 import { AddToPlaylistButton } from "../components/AddToPlaylistButton";
 import { SongCard } from "../components/SongCard";
 import { usePlayer } from "../context/PlayerContext";
 import { SAMPLE_SONGS } from "../data/sampleSongs";
-import { useGetAllSongs } from "../hooks/useQueries";
+import { useInternetIdentity } from "../hooks/useInternetIdentity";
+import { useOwner } from "../hooks/useOwner";
+import {
+  useDeleteSong,
+  useGetAllSongs,
+  useUpdateSong,
+} from "../hooks/useQueries";
 
 export function Home() {
   const { data: songs = [], isLoading } = useGetAllSongs();
   const { playSongFromList, playStaticSongFromList, currentSong, isPlaying } =
     usePlayer();
+  const { identity } = useInternetIdentity();
+  const { isOwner } = useOwner(identity?.getPrincipal().toString());
+  const { mutateAsync: deleteSong } = useDeleteSong();
+  const { mutateAsync: updateSong, isPending: isUpdating } = useUpdateSong();
 
   const hasRealSongs = songs.length > 0;
   const featuredSongs = hasRealSongs ? (songs as Song[]).slice(0, 5) : [];
@@ -18,9 +40,43 @@ export function Home() {
   const sampleFeatured = SAMPLE_SONGS.slice(0, 5);
   const sampleRecent = SAMPLE_SONGS;
 
+  const [editSong, setEditSong] = useState<Song | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editArtist, setEditArtist] = useState("");
+
+  const openEdit = (song: Song) => {
+    setEditSong(song);
+    setEditTitle(song.title);
+    setEditArtist(song.artist);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editSong) return;
+    try {
+      await updateSong({
+        songId: editSong.id,
+        title: editTitle,
+        artist: editArtist,
+      });
+      toast.success("Song updated");
+      setEditSong(null);
+    } catch {
+      toast.error("Failed to update song");
+    }
+  };
+
+  const handleDelete = async (songId: bigint) => {
+    try {
+      await deleteSong(songId);
+      toast.success("Song deleted");
+    } catch {
+      toast.error("Failed to delete song");
+    }
+  };
+
   return (
     <div className="space-y-8">
-      {/* Hero — T-Series bold banner */}
+      {/* Hero */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -78,6 +134,9 @@ export function Home() {
                 isPlaying={isPlaying && currentSong?.id === song.id}
                 onPlay={() => playSongFromList(featuredSongs, i)}
                 index={i}
+                isOwner={isOwner}
+                onDelete={handleDelete}
+                onEdit={openEdit}
               />
             ))}
           </div>
@@ -119,7 +178,15 @@ export function Home() {
                     {i + 1}
                   </span>
                   <Play className="w-4 h-4 text-primary hidden group-hover:block flex-shrink-0" />
-                  <div className="w-10 h-10 rounded bg-gradient-to-br from-primary/30 to-accent/20 flex-shrink-0" />
+                  <div className="w-10 h-10 rounded overflow-hidden bg-gradient-to-br from-primary/30 to-accent/20 flex-shrink-0 flex items-center justify-center">
+                    {song.coverBlobReference ? (
+                      <img
+                        src={song.coverBlobReference.getDirectURL()}
+                        alt={song.title}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : null}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{song.title}</p>
                     <p className="text-xs text-muted-foreground truncate">
@@ -167,6 +234,63 @@ export function Home() {
               ))}
         </div>
       </section>
+
+      {/* Edit Song Dialog */}
+      <Dialog
+        open={!!editSong}
+        onOpenChange={(open) => !open && setEditSong(null)}
+      >
+        <DialogContent
+          className="bg-card border-border max-w-sm"
+          data-ocid="song.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>Edit Song</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-title-h">Song Title</Label>
+              <Input
+                id="edit-title-h"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                className="bg-background border-border"
+                data-ocid="song.input"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-artist-h">Artist Name</Label>
+              <Input
+                id="edit-artist-h"
+                value={editArtist}
+                onChange={(e) => setEditArtist(e.target.value)}
+                className="bg-background border-border"
+                data-ocid="song.input"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setEditSong(null)}
+              data-ocid="song.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveEdit}
+              disabled={isUpdating}
+              className="bg-primary hover:bg-primary/90"
+              data-ocid="song.save_button"
+            >
+              {isUpdating ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : null}
+              {isUpdating ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

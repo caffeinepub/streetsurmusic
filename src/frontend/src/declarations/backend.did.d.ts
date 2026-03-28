@@ -14,7 +14,7 @@ export type ExternalBlob = Uint8Array;
 export interface Song {
   'id' : bigint,
   'title' : string,
-  'genre' : string,
+  'coverBlobReference' : [] | [ExternalBlob],
   'uploader' : Principal,
   'artist' : string,
   'blobReference' : ExternalBlob,
@@ -60,14 +60,21 @@ export interface _SERVICE {
   'getCallerUserRole' : ActorMethod<[], UserRole>,
   'getSongById' : ActorMethod<[bigint], Song>,
   'getSongsByArtist' : ActorMethod<[string], Array<Song>>,
-  'getSongsByGenre' : ActorMethod<[string], Array<Song>>,
   'getSongsByUser' : ActorMethod<[Principal], Array<Song>>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'searchSongs' : ActorMethod<[string], Array<Song>>,
+  'updateSong' : ActorMethod<
+    [bigint, { 'title' : string, 'artist' : string }],
+    undefined
+  >,
   'uploadSong' : ActorMethod<
-    [{ 'title' : string, 'genre' : string, 'artist' : string }, ExternalBlob],
+    [
+      { 'title' : string, 'artist' : string },
+      ExternalBlob,
+      [] | [ExternalBlob],
+    ],
     bigint
   >,
 }

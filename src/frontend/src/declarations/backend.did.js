@@ -29,7 +29,7 @@ export const Time = IDL.Int;
 export const Song = IDL.Record({
   'id' : IDL.Nat,
   'title' : IDL.Text,
-  'genre' : IDL.Text,
+  'coverBlobReference' : IDL.Opt(ExternalBlob),
   'uploader' : IDL.Principal,
   'artist' : IDL.Text,
   'blobReference' : ExternalBlob,
@@ -72,7 +72,6 @@ export const idlService = IDL.Service({
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
   'getSongById' : IDL.Func([IDL.Nat], [Song], ['query']),
   'getSongsByArtist' : IDL.Func([IDL.Text], [IDL.Vec(Song)], ['query']),
-  'getSongsByGenre' : IDL.Func([IDL.Text], [IDL.Vec(Song)], ['query']),
   'getSongsByUser' : IDL.Func([IDL.Principal], [IDL.Vec(Song)], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
@@ -82,14 +81,16 @@ export const idlService = IDL.Service({
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'searchSongs' : IDL.Func([IDL.Text], [IDL.Vec(Song)], ['query']),
+  'updateSong' : IDL.Func(
+      [IDL.Nat, IDL.Record({ 'title' : IDL.Text, 'artist' : IDL.Text })],
+      [],
+      [],
+    ),
   'uploadSong' : IDL.Func(
       [
-        IDL.Record({
-          'title' : IDL.Text,
-          'genre' : IDL.Text,
-          'artist' : IDL.Text,
-        }),
+        IDL.Record({ 'title' : IDL.Text, 'artist' : IDL.Text }),
         ExternalBlob,
+        IDL.Opt(ExternalBlob),
       ],
       [IDL.Nat],
       [],
@@ -120,7 +121,7 @@ export const idlFactory = ({ IDL }) => {
   const Song = IDL.Record({
     'id' : IDL.Nat,
     'title' : IDL.Text,
-    'genre' : IDL.Text,
+    'coverBlobReference' : IDL.Opt(ExternalBlob),
     'uploader' : IDL.Principal,
     'artist' : IDL.Text,
     'blobReference' : ExternalBlob,
@@ -163,7 +164,6 @@ export const idlFactory = ({ IDL }) => {
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
     'getSongById' : IDL.Func([IDL.Nat], [Song], ['query']),
     'getSongsByArtist' : IDL.Func([IDL.Text], [IDL.Vec(Song)], ['query']),
-    'getSongsByGenre' : IDL.Func([IDL.Text], [IDL.Vec(Song)], ['query']),
     'getSongsByUser' : IDL.Func([IDL.Principal], [IDL.Vec(Song)], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
@@ -173,14 +173,16 @@ export const idlFactory = ({ IDL }) => {
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'searchSongs' : IDL.Func([IDL.Text], [IDL.Vec(Song)], ['query']),
+    'updateSong' : IDL.Func(
+        [IDL.Nat, IDL.Record({ 'title' : IDL.Text, 'artist' : IDL.Text })],
+        [],
+        [],
+      ),
     'uploadSong' : IDL.Func(
         [
-          IDL.Record({
-            'title' : IDL.Text,
-            'genre' : IDL.Text,
-            'artist' : IDL.Text,
-          }),
+          IDL.Record({ 'title' : IDL.Text, 'artist' : IDL.Text }),
           ExternalBlob,
+          IDL.Opt(ExternalBlob),
         ],
         [IDL.Nat],
         [],

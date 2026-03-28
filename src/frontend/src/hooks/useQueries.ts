@@ -59,21 +59,30 @@ export function useUploadSong() {
     mutationFn: async ({
       title,
       artist,
-      genre,
+      genre: _genre,
       file,
+      coverFile,
       onProgress,
     }: {
       title: string;
       artist: string;
-      genre: string;
+      genre?: string;
       file: File;
+      coverFile?: File;
       onProgress?: (pct: number) => void;
     }) => {
       if (!actor) throw new Error("Not connected");
       const bytes = new Uint8Array(await file.arrayBuffer());
       let blob = ExternalBlob.fromBytes(bytes);
       if (onProgress) blob = blob.withUploadProgress(onProgress);
-      return actor.uploadSong({ title, artist, genre }, blob);
+
+      let coverBlob: ExternalBlob | null = null;
+      if (coverFile) {
+        const coverBytes = new Uint8Array(await coverFile.arrayBuffer());
+        coverBlob = ExternalBlob.fromBytes(coverBytes);
+      }
+
+      return actor.uploadSong({ title, artist }, blob, coverBlob);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["songs"] });
@@ -88,6 +97,28 @@ export function useDeleteSong() {
     mutationFn: async (songId: bigint) => {
       if (!actor) throw new Error("Not connected");
       return actor.deleteSong(songId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["songs"] });
+    },
+  });
+}
+
+export function useUpdateSong() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      songId,
+      title,
+      artist,
+    }: {
+      songId: bigint;
+      title: string;
+      artist: string;
+    }) => {
+      if (!actor) throw new Error("Not connected");
+      return actor.updateSong(songId, { title, artist });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["songs"] });
