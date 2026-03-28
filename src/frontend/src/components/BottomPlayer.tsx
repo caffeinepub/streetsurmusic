@@ -44,6 +44,7 @@ export function BottomPlayer() {
   } = usePlayer();
 
   const isDraggingRef = useRef(false);
+  const dragValueRef = useRef<number | null>(null);
   const [dragValue, setDragValue] = useState<number | null>(null);
 
   const activeSong = currentSong
@@ -59,17 +60,16 @@ export function BottomPlayer() {
 
   const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     isDraggingRef.current = true;
-    setDragValue(Number(e.target.value));
+    const val = Number(e.target.value);
+    dragValueRef.current = val;
+    setDragValue(val);
   };
 
-  const handleSeekCommit = (
-    e:
-      | React.PointerEvent<HTMLInputElement>
-      | React.TouchEvent<HTMLInputElement>,
-  ) => {
-    if (!isDraggingRef.current) return;
-    const val = Number((e.currentTarget as HTMLInputElement).value);
+  const handleSeekCommit = () => {
+    if (!isDraggingRef.current || dragValueRef.current === null) return;
+    const val = dragValueRef.current;
     isDraggingRef.current = false;
+    dragValueRef.current = null;
     setDragValue(null);
     seek(val / 100);
   };
