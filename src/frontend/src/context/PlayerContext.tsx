@@ -34,6 +34,10 @@ interface PlayerContextType {
   volume: number;
   setVolume: (v: number) => void;
   seek: (pct: number) => void;
+  shuffle: boolean;
+  repeat: boolean;
+  toggleShuffle: () => void;
+  toggleRepeat: () => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | null>(null);
@@ -48,6 +52,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(0.8);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState(false);
 
   // Queue state
   const [songQueue, setSongQueue] = useState<Song[]>([]);
@@ -55,13 +61,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [staticQueue, setStaticQueue] = useState<SampleSong[]>([]);
   const [staticQueueIndex, setStaticQueueIndex] = useState(-1);
 
-  const hasNext =
-    (songQueue.length > 0 && songQueueIndex < songQueue.length - 1) ||
-    (staticQueue.length > 0 && staticQueueIndex < staticQueue.length - 1);
+  const hasNext = shuffle
+    ? songQueue.length > 1 || staticQueue.length > 1
+    : (songQueue.length > 0 && songQueueIndex < songQueue.length - 1) ||
+      (staticQueue.length > 0 && staticQueueIndex < staticQueue.length - 1);
 
   const hasPrev =
     (songQueue.length > 0 && songQueueIndex > 0) ||
     (staticQueue.length > 0 && staticQueueIndex > 0);
+
+  const toggleShuffle = useCallback(() => setShuffle((p) => !p), []);
+  const toggleRepeat = useCallback(() => setRepeat((p) => !p), []);
 
   const playSong = useCallback((song: Song) => {
     setStaticQueue([]);
@@ -119,16 +129,29 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   );
 
   const nextSong = useCallback(() => {
-    if (songQueue.length > 0 && songQueueIndex < songQueue.length - 1) {
-      const newIndex = songQueueIndex + 1;
+    if (songQueue.length > 0) {
+      let newIndex: number;
+      if (shuffle && songQueue.length > 1) {
+        do {
+          newIndex = Math.floor(Math.random() * songQueue.length);
+        } while (newIndex === songQueueIndex);
+      } else {
+        if (songQueueIndex >= songQueue.length - 1) return;
+        newIndex = songQueueIndex + 1;
+      }
       setSongQueueIndex(newIndex);
       setCurrentSong(songQueue[newIndex]);
       setIsPlaying(true);
-    } else if (
-      staticQueue.length > 0 &&
-      staticQueueIndex < staticQueue.length - 1
-    ) {
-      const newIndex = staticQueueIndex + 1;
+    } else if (staticQueue.length > 0) {
+      let newIndex: number;
+      if (shuffle && staticQueue.length > 1) {
+        do {
+          newIndex = Math.floor(Math.random() * staticQueue.length);
+        } while (newIndex === staticQueueIndex);
+      } else {
+        if (staticQueueIndex >= staticQueue.length - 1) return;
+        newIndex = staticQueueIndex + 1;
+      }
       setStaticQueueIndex(newIndex);
       const s = staticQueue[newIndex];
       if (s.audioUrl) {
@@ -140,7 +163,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
       setIsPlaying(true);
     }
-  }, [songQueue, songQueueIndex, staticQueue, staticQueueIndex]);
+  }, [songQueue, songQueueIndex, staticQueue, staticQueueIndex, shuffle]);
 
   const prevSong = useCallback(() => {
     if (songQueue.length > 0 && songQueueIndex > 0) {
@@ -220,27 +243,60 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const onTimeUpdate = () => setProgress(audio.currentTime);
     const onDurationChange = () => setDuration(audio.duration || 0);
     const onEnded = () => {
+      if (repeat) {
+        audio.currentTime = 0;
+        audio.play().catch(() => setIsPlaying(false));
+        return;
+      }
       // Auto-play next song if available
-      if (songQueue.length > 0 && songQueueIndex < songQueue.length - 1) {
-        const newIndex = songQueueIndex + 1;
-        setSongQueueIndex(newIndex);
-        setCurrentSong(songQueue[newIndex]);
-        setIsPlaying(true);
-      } else if (
-        staticQueue.length > 0 &&
-        staticQueueIndex < staticQueue.length - 1
-      ) {
-        const newIndex = staticQueueIndex + 1;
-        setStaticQueueIndex(newIndex);
-        const s = staticQueue[newIndex];
-        if (s.audioUrl) {
-          setCurrentStaticSong({
-            title: s.title,
-            artist: s.artist,
-            url: s.audioUrl,
-          });
+      if (songQueue.length > 0) {
+        let newIndex: number;
+        if (shuffle && songQueue.length > 1) {
+          do {
+            newIndex = Math.floor(Math.random() * songQueue.length);
+          } while (newIndex === songQueueIndex);
+          setSongQueueIndex(newIndex);
+          setCurrentSong(songQueue[newIndex]);
+          setIsPlaying(true);
+        } else if (songQueueIndex < songQueue.length - 1) {
+          newIndex = songQueueIndex + 1;
+          setSongQueueIndex(newIndex);
+          setCurrentSong(songQueue[newIndex]);
+          setIsPlaying(true);
+        } else {
+          setIsPlaying(false);
         }
-        setIsPlaying(true);
+      } else if (staticQueue.length > 0) {
+        let newIndex: number;
+        if (shuffle && staticQueue.length > 1) {
+          do {
+            newIndex = Math.floor(Math.random() * staticQueue.length);
+          } while (newIndex === staticQueueIndex);
+          setStaticQueueIndex(newIndex);
+          const s = staticQueue[newIndex];
+          if (s.audioUrl) {
+            setCurrentStaticSong({
+              title: s.title,
+              artist: s.artist,
+              url: s.audioUrl,
+            });
+          }
+          setIsPlaying(true);
+        } else if (staticQueueIndex < staticQueue.length - 1) {
+          newIndex = staticQueueIndex + 1;
+          setStaticQueueIndex(newIndex);
+          const s = staticQueue[newIndex];
+          if (s.audioUrl) {
+            setCurrentStaticSong({
+              title: s.title,
+              artist: s.artist,
+              url: s.audioUrl,
+            });
+          }
+          setIsPlaying(true);
+        } else {
+          setIsPlaying(false);
+        }
       } else {
         setIsPlaying(false);
       }
@@ -254,7 +310,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener("durationchange", onDurationChange);
       audio.removeEventListener("ended", onEnded);
     };
-  }, [songQueue, songQueueIndex, staticQueue, staticQueueIndex]);
+  }, [
+    songQueue,
+    songQueueIndex,
+    staticQueue,
+    staticQueueIndex,
+    shuffle,
+    repeat,
+  ]);
 
   return (
     <PlayerContext.Provider
@@ -277,6 +340,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         volume,
         setVolume,
         seek,
+        shuffle,
+        repeat,
+        toggleShuffle,
+        toggleRepeat,
       }}
     >
       {/* biome-ignore lint/a11y/useMediaCaption: music streaming app, captions not applicable */}

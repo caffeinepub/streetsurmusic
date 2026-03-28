@@ -4,12 +4,15 @@ import {
   Music,
   Pause,
   Play,
+  Repeat,
+  Shuffle,
   SkipBack,
   SkipForward,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { useRef, useState } from "react";
 import { usePlayer } from "../context/PlayerContext";
 
 function formatTime(s: number): string {
@@ -34,7 +37,14 @@ export function BottomPlayer() {
     volume,
     setVolume,
     seek,
+    shuffle,
+    repeat,
+    toggleShuffle,
+    toggleRepeat,
   } = usePlayer();
+
+  const isDraggingRef = useRef(false);
+  const [dragValue, setDragValue] = useState<number | null>(null);
 
   const activeSong = currentSong
     ? { title: currentSong.title, artist: currentSong.artist }
@@ -42,7 +52,27 @@ export function BottomPlayer() {
       ? { title: currentStaticSong.title, artist: currentStaticSong.artist }
       : null;
 
-  const progressPct = duration ? (progress / duration) * 100 : 0;
+  const progressPct = duration > 0 ? (progress / duration) * 100 : 0;
+  const displayPct = dragValue !== null ? dragValue : progressPct;
+  const displayTime =
+    dragValue !== null ? (dragValue / 100) * duration : progress;
+
+  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    isDraggingRef.current = true;
+    setDragValue(Number(e.target.value));
+  };
+
+  const handleSeekCommit = (
+    e:
+      | React.PointerEvent<HTMLInputElement>
+      | React.TouchEvent<HTMLInputElement>,
+  ) => {
+    if (!isDraggingRef.current) return;
+    const val = Number((e.currentTarget as HTMLInputElement).value);
+    isDraggingRef.current = false;
+    setDragValue(null);
+    seek(val / 100);
+  };
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 h-20 bg-[oklch(0.11_0_0)] border-t border-border flex items-center px-4 gap-4">
@@ -84,6 +114,19 @@ export function BottomPlayer() {
           <Button
             size="icon"
             variant="ghost"
+            onClick={toggleShuffle}
+            data-ocid="player.toggle"
+            className={`w-8 h-8 rounded-full ${
+              shuffle
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Shuffle className="w-4 h-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
             onClick={prevSong}
             disabled={!activeSong || !hasPrev}
             className="w-8 h-8 rounded-full text-muted-foreground hover:text-foreground disabled:opacity-30"
@@ -95,7 +138,7 @@ export function BottomPlayer() {
             variant="ghost"
             onClick={togglePlay}
             disabled={!activeSong}
-            data-ocid="player.toggle"
+            data-ocid="player.primary_button"
             className="w-9 h-9 rounded-full bg-primary hover:bg-primary/90 text-white disabled:opacity-40"
           >
             {isPlaying ? (
@@ -113,20 +156,42 @@ export function BottomPlayer() {
           >
             <SkipForward className="w-4 h-4" />
           </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={toggleRepeat}
+            className={`w-8 h-8 rounded-full ${
+              repeat
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Repeat className="w-4 h-4" />
+          </Button>
         </div>
         <div className="w-full max-w-md flex items-center gap-2">
           <span className="text-xs text-muted-foreground w-8 text-right">
-            {formatTime(progress)}
+            {formatTime(displayTime)}
           </span>
-          <Slider
-            data-ocid="player.editor"
-            value={[progressPct]}
+          <input
+            type="range"
             min={0}
             max={100}
             step={0.1}
-            onValueChange={([v]) => seek(v / 100)}
+            value={displayPct}
             disabled={!activeSong}
-            className="flex-1 [&_.bg-primary]:bg-primary"
+            onChange={handleSeekChange}
+            onPointerUp={handleSeekCommit}
+            onTouchEnd={handleSeekCommit}
+            className="flex-1 cursor-pointer disabled:opacity-40"
+            style={{
+              height: "6px",
+              borderRadius: "9999px",
+              outline: "none",
+              appearance: "none",
+              WebkitAppearance: "none",
+              background: `linear-gradient(to right, rgb(220 38 38) ${displayPct}%, oklch(0.3 0 0) ${displayPct}%)`,
+            }}
           />
           <span className="text-xs text-muted-foreground w-8">
             {formatTime(duration)}
