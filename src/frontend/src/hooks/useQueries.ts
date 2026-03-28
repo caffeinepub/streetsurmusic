@@ -4,6 +4,30 @@ import { ExternalBlob } from "../backend";
 import type { Song, UserProfile } from "../backend";
 import { useActor } from "./useActor";
 
+const SONG_GENRES_KEY = "streetSurSongGenres";
+
+export function getSongGenre(songId: bigint | string): string {
+  try {
+    const stored = localStorage.getItem(SONG_GENRES_KEY);
+    if (!stored) return "";
+    const map: Record<string, string> = JSON.parse(stored);
+    return map[String(songId)] ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function saveSongGenre(songId: bigint | string, genre: string) {
+  try {
+    const stored = localStorage.getItem(SONG_GENRES_KEY);
+    const map: Record<string, string> = stored ? JSON.parse(stored) : {};
+    map[String(songId)] = genre;
+    localStorage.setItem(SONG_GENRES_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
 export function useGetAllSongs() {
   const { actor, isFetching } = useActor();
   return useQuery<Song[]>({
@@ -59,7 +83,7 @@ export function useUploadSong() {
     mutationFn: async ({
       title,
       artist,
-      genre: _genre,
+      genre,
       file,
       coverFile,
       onProgress,
@@ -82,7 +106,10 @@ export function useUploadSong() {
         coverBlob = ExternalBlob.fromBytes(coverBytes);
       }
 
-      return actor.uploadSong({ title, artist }, blob, coverBlob);
+      const songId = await actor.uploadSong({ title, artist }, blob, coverBlob);
+      // Save genre locally since backend doesn't store genre field
+      if (genre) saveSongGenre(songId, genre);
+      return songId;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["songs"] });

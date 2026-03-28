@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/popover";
 import { Check, ListPlus } from "lucide-react";
 import { useState } from "react";
-import { useLocalProfile } from "../hooks/useLocalProfile";
+import { useLocalProfileContext } from "../context/LocalProfileContext";
 
 interface AddToPlaylistButtonProps {
   songId: string;
@@ -18,7 +18,7 @@ export function AddToPlaylistButton({
   className,
 }: AddToPlaylistButtonProps) {
   const { profile, addSongToPlaylist, removeSongFromPlaylist } =
-    useLocalProfile();
+    useLocalProfileContext();
   const [open, setOpen] = useState(false);
 
   const handleToggle = (playlistId: string, isInPlaylist: boolean) => {

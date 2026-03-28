@@ -2,9 +2,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Check,
+  ListPlus,
   MoreVertical,
   Music,
   Pause,
@@ -15,7 +18,9 @@ import {
   UserPlus,
 } from "lucide-react";
 import { motion } from "motion/react";
+import { toast } from "sonner";
 import type { Song } from "../backend";
+import { useLocalProfileContext } from "../context/LocalProfileContext";
 import type { SampleSong } from "../data/sampleSongs";
 import { useFollowedArtists } from "../hooks/useFollowedArtists";
 
@@ -47,6 +52,8 @@ function stopProp(e: React.SyntheticEvent) {
 
 export function SongCard(props: SongCardProps) {
   const { toggleFollow, isFollowing } = useFollowedArtists();
+  const { profile, addSongToPlaylist, removeSongFromPlaylist } =
+    useLocalProfileContext();
 
   if (isRealSong(props)) {
     const {
@@ -60,6 +67,7 @@ export function SongCard(props: SongCardProps) {
     } = props;
     const following = isFollowing(song.artist);
     const hasCover = !!song.coverBlobReference;
+    const songId = song.id.toString();
 
     return (
       <motion.div
@@ -92,54 +100,95 @@ export function SongCard(props: SongCardProps) {
             </div>
           </div>
 
-          {/* Owner 3-dot menu */}
-          {isOwner && (onDelete || onEdit) && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  data-ocid="song.dropdown_menu"
-                  onClick={stopProp}
-                  onKeyDown={stopProp}
-                  className="absolute top-1.5 right-1.5 z-10 w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <MoreVertical className="w-4 h-4 text-white" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="bg-card border-border min-w-[120px]"
+          {/* 3-dot menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                data-ocid="song.dropdown_menu"
                 onClick={stopProp}
+                onKeyDown={stopProp}
+                className="absolute top-1.5 right-1.5 z-10 w-7 h-7 rounded-full bg-black/60 hover:bg-black/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
               >
-                {onEdit && (
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      stopProp(e);
-                      onEdit(song);
-                    }}
-                    data-ocid="song.edit_button"
-                    className="cursor-pointer"
-                  >
-                    <Pencil className="w-3.5 h-3.5 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
-                )}
-                {onDelete && (
-                  <DropdownMenuItem
-                    onClick={(e) => {
-                      stopProp(e);
-                      onDelete(song.id);
-                    }}
-                    data-ocid="song.delete_button"
-                    className="text-destructive cursor-pointer focus:text-destructive"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 mr-2" />
-                    Delete
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+                <MoreVertical className="w-4 h-4 text-white" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="bg-card border-border min-w-[160px]"
+              onClick={stopProp}
+            >
+              {/* Playlists */}
+              {profile.playlists.length === 0 ? (
+                <DropdownMenuItem
+                  disabled
+                  className="text-xs text-muted-foreground"
+                >
+                  <ListPlus className="w-3.5 h-3.5 mr-2" />
+                  No playlists yet
+                </DropdownMenuItem>
+              ) : (
+                profile.playlists.map((pl) => {
+                  const isIn = pl.songs.includes(songId);
+                  return (
+                    <DropdownMenuItem
+                      key={pl.id}
+                      onClick={(e) => {
+                        stopProp(e);
+                        if (isIn) {
+                          removeSongFromPlaylist(pl.id, songId);
+                          toast.success(`Removed from ${pl.name}`);
+                        } else {
+                          addSongToPlaylist(pl.id, songId);
+                          toast.success(`Added to ${pl.name}`);
+                        }
+                      }}
+                      className="cursor-pointer text-sm"
+                    >
+                      <ListPlus className="w-3.5 h-3.5 mr-2" />
+                      <span className="flex-1 truncate">{pl.name}</span>
+                      {isIn && (
+                        <Check className="w-3.5 h-3.5 text-primary ml-1" />
+                      )}
+                    </DropdownMenuItem>
+                  );
+                })
+              )}
+
+              {/* Owner actions */}
+              {isOwner && (onEdit || onDelete) && (
+                <>
+                  <DropdownMenuSeparator className="bg-border" />
+                  {onEdit && (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        stopProp(e);
+                        onEdit(song);
+                      }}
+                      data-ocid="song.edit_button"
+                      className="cursor-pointer"
+                    >
+                      <Pencil className="w-3.5 h-3.5 mr-2" />
+                      Edit
+                    </DropdownMenuItem>
+                  )}
+                  {onDelete && (
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        stopProp(e);
+                        onDelete(song.id);
+                      }}
+                      data-ocid="song.delete_button"
+                      className="text-destructive cursor-pointer focus:text-destructive"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  )}
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         <p className="font-semibold text-foreground truncate text-sm">

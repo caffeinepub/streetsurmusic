@@ -25,6 +25,7 @@ import { SAMPLE_SONGS } from "../data/sampleSongs";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import { useOwner } from "../hooks/useOwner";
 import {
+  getSongGenre,
   useDeleteSong,
   useGetAllSongs,
   useUpdateSong,
@@ -100,7 +101,7 @@ export function Explore() {
   });
 
   const filteredReal = (songs as Song[]).filter((song) => {
-    const songGenre = (song as any).genre ?? "";
+    const songGenre = getSongGenre(song.id);
     const genreMatch =
       selectedGenre === "all" ||
       songGenre.toLowerCase() === selectedGenre.toLowerCase();

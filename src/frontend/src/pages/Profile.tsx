@@ -29,11 +29,11 @@ import { motion } from "motion/react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Song } from "../backend";
+import { useLocalProfileContext } from "../context/LocalProfileContext";
+import type { LocalPlaylist } from "../context/LocalProfileContext";
 import { usePlayer } from "../context/PlayerContext";
 import { useFollowedArtists } from "../hooks/useFollowedArtists";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import type { LocalPlaylist } from "../hooks/useLocalProfile";
-import { useLocalProfile } from "../hooks/useLocalProfile";
 import {
   useDeleteSong,
   useGetAllSongs,
@@ -64,7 +64,7 @@ export function Profile() {
     editPlaylist,
     deletePlaylist,
     removeSongFromPlaylist,
-  } = useLocalProfile();
+  } = useLocalProfileContext();
 
   const { followedArtists } = useFollowedArtists();
 

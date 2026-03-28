@@ -6,15 +6,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Play, TrendingUp } from "lucide-react";
+import {
+  Check,
+  ListPlus,
+  Loader2,
+  MoreVertical,
+  Play,
+  Trash2,
+  TrendingUp,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Song } from "../backend";
-import { AddToPlaylistButton } from "../components/AddToPlaylistButton";
 import { SongCard } from "../components/SongCard";
+import { useLocalProfileContext } from "../context/LocalProfileContext";
 import { usePlayer } from "../context/PlayerContext";
 import { SAMPLE_SONGS } from "../data/sampleSongs";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -24,6 +39,94 @@ import {
   useGetAllSongs,
   useUpdateSong,
 } from "../hooks/useQueries";
+
+function SongRowMenu({
+  song,
+  isOwner,
+  onDelete,
+}: {
+  song: Song;
+  isOwner: boolean;
+  onDelete: (id: bigint) => void;
+}) {
+  const { profile, addSongToPlaylist, removeSongFromPlaylist } =
+    useLocalProfileContext();
+  const songId = song.id.toString();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="w-8 h-8 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-all"
+          data-ocid="home.open_modal_button"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MoreVertical className="w-4 h-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
+        className="bg-card border-border w-48"
+        onClick={(e) => e.stopPropagation()}
+        data-ocid="home.dropdown_menu"
+      >
+        {/* Add to playlist submenu */}
+        {profile.playlists.length === 0 ? (
+          <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+            <ListPlus className="w-3.5 h-3.5 mr-2" />
+            No playlists — create in Profile
+          </DropdownMenuItem>
+        ) : (
+          profile.playlists.map((pl) => {
+            const isIn = pl.songs.includes(songId);
+            return (
+              <DropdownMenuItem
+                key={pl.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isIn) {
+                    removeSongFromPlaylist(pl.id, songId);
+                    toast.success(`Removed from ${pl.name}`);
+                  } else {
+                    addSongToPlaylist(pl.id, songId);
+                    toast.success(`Added to ${pl.name}`);
+                  }
+                }}
+                className="cursor-pointer text-sm"
+              >
+                <ListPlus className="w-3.5 h-3.5 mr-2" />
+                <span className="flex-1 truncate">{pl.name}</span>
+                {isIn && (
+                  <Check className="w-3.5 h-3.5 text-primary ml-1 flex-shrink-0" />
+                )}
+              </DropdownMenuItem>
+            );
+          })
+        )}
+
+        {/* Delete — owner only */}
+        {isOwner && (
+          <>
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(song.id);
+              }}
+              data-ocid="home.delete_button"
+              className="text-destructive focus:text-destructive cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-2" />
+              Delete Song
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function Home() {
   const { data: songs = [], isLoading } = useGetAllSongs();
@@ -198,9 +301,10 @@ export function Home() {
                       Number(song.uploadedAt / BigInt(1e6)),
                     ).toLocaleDateString()}
                   </p>
-                  <AddToPlaylistButton
-                    songId={song.id.toString()}
-                    className="opacity-0 group-hover:opacity-100"
+                  <SongRowMenu
+                    song={song}
+                    isOwner={isOwner}
+                    onDelete={handleDelete}
                   />
                 </motion.div>
               ))

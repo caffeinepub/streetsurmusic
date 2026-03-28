@@ -7,6 +7,7 @@ import { Sidebar } from "./components/Sidebar";
 import { AboutModal } from "./components/modals/AboutModal";
 import { HelpModal } from "./components/modals/HelpModal";
 import { SettingsModal } from "./components/modals/SettingsModal";
+import { LocalProfileProvider } from "./context/LocalProfileContext";
 import { NavigationProvider, useNavigation } from "./context/NavigationContext";
 import { PlayerProvider } from "./context/PlayerContext";
 import {
@@ -202,11 +203,13 @@ function AppContent() {
 export default function App() {
   return (
     <InternetIdentityProvider>
-      <PlayerProvider>
-        <NavigationProvider>
-          <AppContent />
-        </NavigationProvider>
-      </PlayerProvider>
+      <LocalProfileProvider>
+        <PlayerProvider>
+          <NavigationProvider>
+            <AppContent />
+          </NavigationProvider>
+        </PlayerProvider>
+      </LocalProfileProvider>
     </InternetIdentityProvider>
   );
 }
