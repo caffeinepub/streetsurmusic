@@ -54,6 +54,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
+  const isSeekingRef = useRef(false);
+  const durationRef = useRef(0);
 
   // Queue state
   const [songQueue, setSongQueue] = useState<Song[]>([]);
@@ -202,14 +204,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const seek = useCallback(
-    (pct: number) => {
-      if (audioRef.current && duration) {
-        audioRef.current.currentTime = pct * duration;
-      }
-    },
-    [duration],
-  );
+  // seek uses a ref for duration to always have fresh value
+  const seek = useCallback((pct: number) => {
+    const audio = audioRef.current;
+    const dur = durationRef.current;
+    if (!audio || dur <= 0) return;
+    const newTime = pct * dur;
+    isSeekingRef.current = true;
+    audio.currentTime = newTime;
+    // Immediately update progress so UI doesn't flash back to 0
+    setProgress(newTime);
+  }, []);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -240,8 +245,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const onTimeUpdate = () => setProgress(audio.currentTime);
-    const onDurationChange = () => setDuration(audio.duration || 0);
+    const onTimeUpdate = () => {
+      // Don't overwrite progress while user is seeking
+      if (!isSeekingRef.current) {
+        setProgress(audio.currentTime);
+      }
+    };
+    const onDurationChange = () => {
+      const d = audio.duration || 0;
+      setDuration(d);
+      durationRef.current = d;
+    };
+    const onSeeked = () => {
+      // Seeking is complete, allow timeupdate again
+      isSeekingRef.current = false;
+      setProgress(audio.currentTime);
+    };
     const onEnded = () => {
       if (repeat) {
         audio.currentTime = 0;
@@ -304,10 +323,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("durationchange", onDurationChange);
+    audio.addEventListener("seeked", onSeeked);
     audio.addEventListener("ended", onEnded);
     return () => {
       audio.removeEventListener("timeupdate", onTimeUpdate);
       audio.removeEventListener("durationchange", onDurationChange);
+      audio.removeEventListener("seeked", onSeeked);
       audio.removeEventListener("ended", onEnded);
     };
   }, [

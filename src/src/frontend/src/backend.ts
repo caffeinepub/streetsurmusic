@@ -95,6 +95,8 @@ export interface Song {
     title: string;
     uploader: Principal;
     artist: string;
+    genre: string;
+    coverPhotoUrl: string | null;
     blobReference: ExternalBlob;
     uploadedAt: Time;
 }
@@ -140,6 +142,8 @@ export interface backendInterface {
     uploadSong(metadata: {
         title: string;
         artist: string;
+        genre: string;
+        coverPhotoUrl: string | null;
     }, blobReference: ExternalBlob): Promise<bigint>;
 }
 import type { ExternalBlob as _ExternalBlob, Song as _Song, Time as _Time, UserProfile as _UserProfile, UserRole as _UserRole, _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
@@ -414,17 +418,20 @@ export class Backend implements backendInterface {
     async uploadSong(arg0: {
         title: string;
         artist: string;
+        genre: string;
+        coverPhotoUrl: string | null;
     }, arg1: ExternalBlob): Promise<bigint> {
+        const candid_arg0 = { title: arg0.title, artist: arg0.artist, genre: arg0.genre, coverPhotoUrl: arg0.coverPhotoUrl !== null ? [arg0.coverPhotoUrl] as [string] : [] as [] };
         if (this.processError) {
             try {
-                const result = await this.actor.uploadSong(arg0, await to_candid_ExternalBlob_n17(this._uploadFile, this._downloadFile, arg1));
+                const result = await this.actor.uploadSong(candid_arg0, await to_candid_ExternalBlob_n17(this._uploadFile, this._downloadFile, arg1));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.uploadSong(arg0, await to_candid_ExternalBlob_n17(this._uploadFile, this._downloadFile, arg1));
+            const result = await this.actor.uploadSong(candid_arg0, await to_candid_ExternalBlob_n17(this._uploadFile, this._downloadFile, arg1));
             return result;
         }
     }
@@ -455,6 +462,8 @@ async function from_candid_record_n12(_uploadFile: (file: ExternalBlob) => Promi
     title: string;
     uploader: Principal;
     artist: string;
+    genre: string;
+    coverPhotoUrl: [] | [string];
     blobReference: _ExternalBlob;
     uploadedAt: _Time;
 }): Promise<{
@@ -462,6 +471,8 @@ async function from_candid_record_n12(_uploadFile: (file: ExternalBlob) => Promi
     title: string;
     uploader: Principal;
     artist: string;
+    genre: string;
+    coverPhotoUrl: string | null;
     blobReference: ExternalBlob;
     uploadedAt: Time;
 }> {
@@ -470,6 +481,8 @@ async function from_candid_record_n12(_uploadFile: (file: ExternalBlob) => Promi
         title: value.title,
         uploader: value.uploader,
         artist: value.artist,
+        genre: value.genre,
+        coverPhotoUrl: value.coverPhotoUrl.length === 0 ? null : value.coverPhotoUrl[0],
         blobReference: await from_candid_ExternalBlob_n13(_uploadFile, _downloadFile, value.blobReference),
         uploadedAt: value.uploadedAt
     };

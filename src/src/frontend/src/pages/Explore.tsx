@@ -6,7 +6,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Compass, Filter } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Song } from "../backend";
 import { SongCard } from "../components/SongCard";
 import { usePlayer } from "../context/PlayerContext";
@@ -16,7 +16,7 @@ import { useGetAllSongs } from "../hooks/useQueries";
 const GENRES = [
   "Pop",
   "Rock",
-  "Hip-Hop",
+  "Hip Hop",
   "R&B",
   "Electronic",
   "Jazz",
@@ -29,7 +29,7 @@ const YEARS = [2026, 2025, 2024, 2023, 2022, 2021, 2020];
 
 export function Explore() {
   const { data: songs = [], isLoading } = useGetAllSongs();
-  const { playSong, currentSong, isPlaying } = usePlayer();
+  const { playSong, currentSong, isPlaying, setSongQueue } = usePlayer();
   const hasRealSongs = songs.length > 0;
 
   const [selectedGenre, setSelectedGenre] = useState<string>("all");
@@ -37,13 +37,19 @@ export function Explore() {
 
   // Filter sample songs client-side
   const filteredSamples = SAMPLE_SONGS.filter((s) => {
-    const genreMatch = selectedGenre === "all" || s.genre === selectedGenre;
+    const sGenre = (s.genre || "").replace("-", " ").toLowerCase();
+    const filterGenre = selectedGenre.replace("-", " ").toLowerCase();
+    const genreMatch = selectedGenre === "all" || sGenre === filterGenre;
     const yearMatch = selectedYear === "all" || s.year === Number(selectedYear);
     return genreMatch && yearMatch;
   });
 
-  // For real songs: filter by year from uploadedAt if available
+  // For real songs: filter by genre and year
   const filteredReal = songs.filter((song: Song) => {
+    const sGenre = (song.genre || "").replace("-", " ").toLowerCase();
+    const filterGenre = selectedGenre.replace("-", " ").toLowerCase();
+    const genreMatch = selectedGenre === "all" || sGenre === filterGenre;
+    if (!genreMatch) return false;
     if (selectedYear === "all") return true;
     const year = new Date(Number(song.uploadedAt / BigInt(1e6))).getFullYear();
     return year === Number(selectedYear);
@@ -51,6 +57,12 @@ export function Explore() {
 
   const displaySongs = hasRealSongs ? filteredReal : filteredSamples;
   const totalCount = hasRealSongs ? songs.length : SAMPLE_SONGS.length;
+
+  useEffect(() => {
+    if (songs.length > 0) {
+      setSongQueue(filteredReal);
+    }
+  }, [songs, filteredReal, setSongQueue]);
 
   return (
     <div data-ocid="explore.section">
@@ -92,7 +104,7 @@ export function Explore() {
         <Select value={selectedYear} onValueChange={setSelectedYear}>
           <SelectTrigger
             className="w-[130px] h-8 text-sm bg-background border-border"
-            data-ocid="explore.select"
+            data-ocid="explore.year.select"
           >
             <SelectValue placeholder="All Years" />
           </SelectTrigger>

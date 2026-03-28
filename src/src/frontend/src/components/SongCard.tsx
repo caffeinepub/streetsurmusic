@@ -37,9 +37,17 @@ export function SongCard(props: SongCardProps) {
         onClick={() => onPlay(song)}
       >
         <div className="relative mb-3 aspect-square rounded-md overflow-hidden bg-muted">
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-accent/20">
-            <Music className="w-12 h-12 text-primary/60" />
-          </div>
+          {song.coverPhotoUrl ? (
+            <img
+              src={song.coverPhotoUrl}
+              alt={song.title}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/20 to-accent/20">
+              <Music className="w-12 h-12 text-primary/60" />
+            </div>
+          )}
           <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity">
             <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-glow">
               {isPlaying ? (

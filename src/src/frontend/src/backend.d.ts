@@ -18,8 +18,10 @@ export type Time = bigint;
 export interface Song {
     id: bigint;
     title: string;
-    uploader: Principal;
     artist: string;
+    genre: string;
+    coverPhotoUrl: string | null;
+    uploader: Principal;
     blobReference: ExternalBlob;
     uploadedAt: Time;
 }
@@ -47,5 +49,7 @@ export interface backendInterface {
     uploadSong(metadata: {
         title: string;
         artist: string;
+        genre: string;
+        coverPhotoUrl: string | null;
     }, blobReference: ExternalBlob): Promise<bigint>;
 }

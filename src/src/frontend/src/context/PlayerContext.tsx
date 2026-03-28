@@ -28,6 +28,15 @@ interface PlayerContextType {
   volume: number;
   setVolume: (v: number) => void;
   seek: (pct: number) => void;
+  // Queue and navigation
+  songQueue: Song[];
+  setSongQueue: (songs: Song[]) => void;
+  skipNext: () => void;
+  skipPrev: () => void;
+  shuffle: boolean;
+  repeat: boolean;
+  toggleShuffle: () => void;
+  toggleRepeat: () => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | null>(null);
@@ -41,7 +50,33 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(0.8);
+  const [songQueue, setSongQueueState] = useState<Song[]>([]);
+  const [shuffle, setShuffle] = useState(false);
+  const [repeat, setRepeat] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const currentSongRef = useRef<Song | null>(null);
+  const songQueueRef = useRef<Song[]>([]);
+  const shuffleRef = useRef(false);
+  const repeatRef = useRef(false);
+
+  // Keep refs in sync
+  useEffect(() => {
+    currentSongRef.current = currentSong;
+  }, [currentSong]);
+  useEffect(() => {
+    songQueueRef.current = songQueue;
+  }, [songQueue]);
+  useEffect(() => {
+    shuffleRef.current = shuffle;
+  }, [shuffle]);
+  useEffect(() => {
+    repeatRef.current = repeat;
+  }, [repeat]);
+
+  const setSongQueue = useCallback((songs: Song[]) => {
+    setSongQueueState(songs);
+  }, []);
 
   const playSong = useCallback((song: Song) => {
     setCurrentStaticSong(null);
@@ -80,6 +115,32 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     [duration],
   );
 
+  const skipNext = useCallback(() => {
+    const queue = songQueueRef.current;
+    const cur = currentSongRef.current;
+    if (!queue.length) return;
+    if (shuffleRef.current) {
+      const idx = Math.floor(Math.random() * queue.length);
+      playSong(queue[idx]);
+      return;
+    }
+    const curIdx = cur ? queue.findIndex((s) => s.id === cur.id) : -1;
+    const nextIdx = (curIdx + 1) % queue.length;
+    playSong(queue[nextIdx]);
+  }, [playSong]);
+
+  const skipPrev = useCallback(() => {
+    const queue = songQueueRef.current;
+    const cur = currentSongRef.current;
+    if (!queue.length) return;
+    const curIdx = cur ? queue.findIndex((s) => s.id === cur.id) : -1;
+    const prevIdx = curIdx <= 0 ? queue.length - 1 : curIdx - 1;
+    playSong(queue[prevIdx]);
+  }, [playSong]);
+
+  const toggleShuffle = useCallback(() => setShuffle((v) => !v), []);
+  const toggleRepeat = useCallback(() => setRepeat((v) => !v), []);
+
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -111,7 +172,31 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     const onTimeUpdate = () => setProgress(audio.currentTime);
     const onDurationChange = () => setDuration(audio.duration || 0);
-    const onEnded = () => setIsPlaying(false);
+    const onEnded = () => {
+      if (repeatRef.current && audio) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+        return;
+      }
+      const queue = songQueueRef.current;
+      const cur = currentSongRef.current;
+      if (queue.length > 1 && cur) {
+        if (shuffleRef.current) {
+          const idx = Math.floor(Math.random() * queue.length);
+          playSong(queue[idx]);
+        } else {
+          const curIdx = queue.findIndex((s) => s.id === cur.id);
+          const nextIdx = curIdx + 1;
+          if (nextIdx < queue.length) {
+            playSong(queue[nextIdx]);
+          } else {
+            setIsPlaying(false);
+          }
+        }
+      } else {
+        setIsPlaying(false);
+      }
+    };
 
     audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("durationchange", onDurationChange);
@@ -121,7 +206,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       audio.removeEventListener("durationchange", onDurationChange);
       audio.removeEventListener("ended", onEnded);
     };
-  }, []);
+  }, [playSong]);
 
   return (
     <PlayerContext.Provider
@@ -138,6 +223,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         volume,
         setVolume,
         seek,
+        songQueue,
+        setSongQueue,
+        skipNext,
+        skipPrev,
+        shuffle,
+        repeat,
+        toggleShuffle,
+        toggleRepeat,
       }}
     >
       {/* biome-ignore lint/a11y/useMediaCaption: music streaming app, captions not applicable */}

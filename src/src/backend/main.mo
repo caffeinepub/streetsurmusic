@@ -6,7 +6,6 @@ import Principal "mo:core/Principal";
 import Order "mo:core/Order";
 import Iter "mo:core/Iter";
 import Runtime "mo:core/Runtime";
-import List "mo:core/List";
 import Array "mo:core/Array";
 import MixinStorage "blob-storage/Mixin";
 import Storage "blob-storage/Storage";
@@ -18,16 +17,12 @@ actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
-  module Song {
-    public func compare(song1 : Song, song2 : Song) : Order.Order {
-      Nat.compare(song1.id, song2.id);
-    };
-  };
-
   type Song = {
     id : Nat;
     title : Text;
     artist : Text;
+    genre : Text;
+    coverPhotoUrl : ?Text;
     uploader : Principal;
     blobReference : Storage.ExternalBlob;
     uploadedAt : Time.Time;
@@ -37,9 +32,28 @@ actor {
     name : Text;
   };
 
-  var nextSongId = 0;
+  stable var nextSongId : Nat = 0;
+  stable var stableSongsData : [(Nat, Song)] = [];
+  stable var stableUserProfilesData : [(Principal, UserProfile)] = [];
+
   let songs = Map.empty<Nat, Song>();
   let userProfiles = Map.empty<Principal, UserProfile>();
+
+  system func preupgrade() {
+    stableSongsData := Iter.toArray(songs.entries());
+    stableUserProfilesData := Iter.toArray(userProfiles.entries());
+  };
+
+  system func postupgrade() {
+    for ((k, v) in stableSongsData.vals()) {
+      songs.add(k, v);
+    };
+    stableSongsData := [];
+    for ((k, v) in stableUserProfilesData.vals()) {
+      userProfiles.add(k, v);
+    };
+    stableUserProfilesData := [];
+  };
 
   // User profile management functions
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
@@ -64,7 +78,10 @@ actor {
   };
 
   // Song management functions
-  public shared ({ caller }) func uploadSong(metadata : { title : Text; artist : Text }, blobReference : Storage.ExternalBlob) : async Nat {
+  public shared ({ caller }) func uploadSong(
+    metadata : { title : Text; artist : Text; genre : Text; coverPhotoUrl : ?Text },
+    blobReference : Storage.ExternalBlob
+  ) : async Nat {
     if (Principal.isAnonymous(caller)) {
       Runtime.trap("Unauthorized: Must be logged in to upload songs");
     };
@@ -74,6 +91,8 @@ actor {
       id = songId;
       title = metadata.title;
       artist = metadata.artist;
+      genre = metadata.genre;
+      coverPhotoUrl = metadata.coverPhotoUrl;
       uploader = caller;
       blobReference;
       uploadedAt = Time.now();
@@ -83,31 +102,32 @@ actor {
   };
 
   public query func getAllSongs() : async [Song] {
-    songs.values().toArray().sort();
+    let arr = songs.values().toArray();
+    Array.sort(arr, func(a : Song, b : Song) : Order.Order { Nat.compare(a.id, b.id) });
   };
 
   public query func getSongsByUser(user : Principal) : async [Song] {
-    songs.values().toArray().filter(
-      func(song) {
-        song.uploader == user;
-      }
-    ).sort();
+    let arr = songs.values().toArray();
+    let filtered = Array.filter(arr, func(song : Song) : Bool { song.uploader == user });
+    Array.sort(filtered, func(a : Song, b : Song) : Order.Order { Nat.compare(a.id, b.id) });
   };
 
   public query func getSongsByArtist(artistName : Text) : async [Song] {
-    songs.values().toArray().filter(
-      func(song) {
-        song.artist == artistName;
-      }
-    ).sort();
+    let arr = songs.values().toArray();
+    let filtered = Array.filter(arr, func(song : Song) : Bool { song.artist == artistName });
+    Array.sort(filtered, func(a : Song, b : Song) : Order.Order { Nat.compare(a.id, b.id) });
   };
 
   public query func searchSongs(searchText : Text) : async [Song] {
-    songs.values().toArray().filter(
-      func(song) {
-        song.title.toLower().contains(#text (searchText.toLower())) or song.artist.toLower().contains(#text (searchText.toLower()));
+    let arr = songs.values().toArray();
+    let filtered = Array.filter(
+      arr,
+      func(song : Song) : Bool {
+        song.title.toLower().contains(#text (searchText.toLower())) or
+        song.artist.toLower().contains(#text (searchText.toLower()))
       }
-    ).sort();
+    );
+    Array.sort(filtered, func(a : Song, b : Song) : Order.Order { Nat.compare(a.id, b.id) });
   };
 
   public shared ({ caller }) func deleteSong(songId : Nat) : async () {

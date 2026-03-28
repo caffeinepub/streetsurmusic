@@ -16,6 +16,8 @@ export interface Song {
   'title' : string,
   'uploader' : Principal,
   'artist' : string,
+  'genre' : string,
+  'coverPhotoUrl' : [] | [string],
   'blobReference' : ExternalBlob,
   'uploadedAt' : Time,
 }
@@ -65,7 +67,7 @@ export interface _SERVICE {
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'searchSongs' : ActorMethod<[string], Array<Song>>,
   'uploadSong' : ActorMethod<
-    [{ 'title' : string, 'artist' : string }, ExternalBlob],
+    [{ 'title' : string, 'artist' : string, 'genre' : string, 'coverPhotoUrl' : [] | [string] }, ExternalBlob],
     bigint
   >,
 }

@@ -59,11 +59,15 @@ export function useUploadSong() {
     mutationFn: async ({
       title,
       artist,
+      genre,
+      coverPhotoUrl,
       file,
       onProgress,
     }: {
       title: string;
       artist: string;
+      genre: string;
+      coverPhotoUrl: string | null;
       file: File;
       onProgress?: (pct: number) => void;
     }) => {
@@ -71,7 +75,7 @@ export function useUploadSong() {
       const bytes = new Uint8Array(await file.arrayBuffer());
       let blob = ExternalBlob.fromBytes(bytes);
       if (onProgress) blob = blob.withUploadProgress(onProgress);
-      return actor.uploadSong({ title, artist }, blob);
+      return actor.uploadSong({ title, artist, genre, coverPhotoUrl }, blob);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["songs"] });

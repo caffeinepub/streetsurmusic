@@ -1,20 +1,46 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle, Music, Upload as UploadIcon } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  CheckCircle,
+  ImagePlus,
+  Music,
+  Upload as UploadIcon,
+} from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useUploadSong } from "../hooks/useQueries";
 
+const GENRES = [
+  "Bollywood",
+  "Hip Hop",
+  "Pop",
+  "Rock",
+  "Electronic",
+  "Indie",
+  "Classical",
+  "Other",
+];
+
 export function Upload() {
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
+  const [genre, setGenre] = useState("");
+  const [coverPhotoUrl, setCoverPhotoUrl] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const {
     mutateAsync: uploadSong,
     isPending,
@@ -28,6 +54,21 @@ export function Upload() {
     } else {
       toast.error("Please select an audio file (MP3, WAV, etc.)");
     }
+  };
+
+  const handleCoverPhoto = (f: File) => {
+    if (!f.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result;
+      if (typeof result === "string") {
+        setCoverPhotoUrl(result);
+      }
+    };
+    reader.readAsDataURL(f);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -46,7 +87,7 @@ export function Upload() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !artist.trim() || !file) {
+    if (!title.trim() || !artist.trim() || !file || !genre) {
       toast.error("Please fill all fields and select a file");
       return;
     }
@@ -55,12 +96,16 @@ export function Upload() {
       await uploadSong({
         title: title.trim(),
         artist: artist.trim(),
+        genre,
+        coverPhotoUrl,
         file,
         onProgress: setUploadProgress,
       });
       toast.success("Song uploaded successfully!");
       setTitle("");
       setArtist("");
+      setGenre("");
+      setCoverPhotoUrl(null);
       setFile(null);
       setUploadProgress(0);
     } catch {
@@ -72,6 +117,8 @@ export function Upload() {
     reset();
     setTitle("");
     setArtist("");
+    setGenre("");
+    setCoverPhotoUrl(null);
     setFile(null);
     setUploadProgress(0);
   };
@@ -133,6 +180,67 @@ export function Upload() {
           />
         </div>
 
+        <div className="space-y-2">
+          <Label htmlFor="genre-select">Genre</Label>
+          <Select value={genre} onValueChange={setGenre}>
+            <SelectTrigger
+              id="genre-select"
+              data-ocid="upload.select"
+              className="bg-card border-border"
+            >
+              <SelectValue placeholder="Select a genre" />
+            </SelectTrigger>
+            <SelectContent>
+              {GENRES.map((g) => (
+                <SelectItem key={g} value={g}>
+                  {g}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Cover Photo */}
+        <div className="space-y-2">
+          <Label>Cover Photo (optional)</Label>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              data-ocid="upload.upload_button"
+              onClick={() => coverInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-border hover:border-primary/50 hover:bg-muted/50 transition-colors text-sm text-muted-foreground"
+            >
+              <ImagePlus className="w-4 h-4" />
+              {coverPhotoUrl ? "Change Photo" : "Add Cover Photo"}
+            </button>
+            <input
+              ref={coverInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) =>
+                e.target.files?.[0] && handleCoverPhoto(e.target.files[0])
+              }
+            />
+            {coverPhotoUrl && (
+              <div className="relative">
+                <img
+                  src={coverPhotoUrl}
+                  alt="Cover preview"
+                  className="w-14 h-14 rounded-md object-cover border border-border"
+                />
+                <button
+                  type="button"
+                  onClick={() => setCoverPhotoUrl(null)}
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-destructive text-white text-xs flex items-center justify-center"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Dropzone */}
         <div className="space-y-2">
           <Label>Audio File</Label>
@@ -163,7 +271,9 @@ export function Upload() {
               }
             />
             <Music
-              className={`w-10 h-10 mx-auto mb-3 ${file ? "text-primary" : "text-muted-foreground"}`}
+              className={`w-10 h-10 mx-auto mb-3 ${
+                file ? "text-primary" : "text-muted-foreground"
+              }`}
             />
             {file ? (
               <>
@@ -202,7 +312,7 @@ export function Upload() {
 
         <Button
           type="submit"
-          disabled={isPending || !title || !artist || !file}
+          disabled={isPending || !title || !artist || !genre || !file}
           data-ocid="upload.submit_button"
           className="w-full bg-primary hover:bg-primary/90 text-white"
         >

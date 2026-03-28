@@ -12,7 +12,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { usePlayer } from "../context/PlayerContext";
 
 function formatTime(s: number): string {
@@ -20,6 +20,10 @@ function formatTime(s: number): string {
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+function setRangeGradient(el: HTMLInputElement, pct: number) {
+  el.style.background = `linear-gradient(to right, rgb(220 38 38) ${pct}%, oklch(0.3 0 0) ${pct}%)`;
 }
 
 export function BottomPlayer() {
@@ -36,43 +40,35 @@ export function BottomPlayer() {
     duration,
     volume,
     setVolume,
-    seek,
     shuffle,
     repeat,
     toggleShuffle,
     toggleRepeat,
+    audioRef,
   } = usePlayer();
 
+  const rangeRef = useRef<HTMLInputElement>(null);
+  const timeDisplayRef = useRef<HTMLSpanElement>(null);
   const isDraggingRef = useRef(false);
-  const dragValueRef = useRef<number | null>(null);
-  const [dragValue, setDragValue] = useState<number | null>(null);
+
+  // Sync slider + time display from playback — only when NOT dragging
+  useEffect(() => {
+    if (isDraggingRef.current) return;
+    const pct = duration > 0 ? (progress / duration) * 100 : 0;
+    if (rangeRef.current) {
+      rangeRef.current.value = String(pct);
+      setRangeGradient(rangeRef.current, pct);
+    }
+    if (timeDisplayRef.current) {
+      timeDisplayRef.current.textContent = formatTime(progress);
+    }
+  }, [progress, duration]);
 
   const activeSong = currentSong
     ? { title: currentSong.title, artist: currentSong.artist }
     : currentStaticSong
       ? { title: currentStaticSong.title, artist: currentStaticSong.artist }
       : null;
-
-  const progressPct = duration > 0 ? (progress / duration) * 100 : 0;
-  const displayPct = dragValue !== null ? dragValue : progressPct;
-  const displayTime =
-    dragValue !== null ? (dragValue / 100) * duration : progress;
-
-  const handleSeekChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    isDraggingRef.current = true;
-    const val = Number(e.target.value);
-    dragValueRef.current = val;
-    setDragValue(val);
-  };
-
-  const handleSeekCommit = () => {
-    if (!isDraggingRef.current || dragValueRef.current === null) return;
-    const val = dragValueRef.current;
-    isDraggingRef.current = false;
-    dragValueRef.current = null;
-    setDragValue(null);
-    seek(val / 100);
-  };
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 h-20 bg-[oklch(0.11_0_0)] border-t border-border flex items-center px-4 gap-4">
@@ -115,7 +111,6 @@ export function BottomPlayer() {
             size="icon"
             variant="ghost"
             onClick={toggleShuffle}
-            data-ocid="player.toggle"
             className={`w-8 h-8 rounded-full ${
               shuffle
                 ? "text-primary"
@@ -138,7 +133,6 @@ export function BottomPlayer() {
             variant="ghost"
             onClick={togglePlay}
             disabled={!activeSong}
-            data-ocid="player.primary_button"
             className="w-9 h-9 rounded-full bg-primary hover:bg-primary/90 text-white disabled:opacity-40"
           >
             {isPlaying ? (
@@ -170,19 +164,44 @@ export function BottomPlayer() {
           </Button>
         </div>
         <div className="w-full max-w-md flex items-center gap-2">
-          <span className="text-xs text-muted-foreground w-8 text-right">
-            {formatTime(displayTime)}
+          <span
+            ref={timeDisplayRef}
+            className="text-xs text-muted-foreground w-8 text-right"
+          >
+            0:00
           </span>
           <input
+            ref={rangeRef}
             type="range"
             min={0}
             max={100}
             step={0.1}
-            value={displayPct}
+            defaultValue={0}
             disabled={!activeSong}
-            onChange={handleSeekChange}
-            onPointerUp={handleSeekCommit}
-            onTouchEnd={handleSeekCommit}
+            onPointerDown={() => {
+              isDraggingRef.current = true;
+            }}
+            onInput={(e) => {
+              // Update gradient + time display while dragging — pure DOM, no React state
+              const val = Number((e.target as HTMLInputElement).value);
+              setRangeGradient(e.target as HTMLInputElement, val);
+              if (timeDisplayRef.current && audioRef.current) {
+                const dur = audioRef.current.duration || duration;
+                timeDisplayRef.current.textContent = formatTime(
+                  (val / 100) * dur,
+                );
+              }
+            }}
+            onPointerUp={(e) => {
+              isDraggingRef.current = false;
+              const val = Number(e.currentTarget.value);
+              const audio = audioRef.current;
+              if (!audio) return;
+              const dur = audio.duration;
+              if (!dur || !Number.isFinite(dur) || dur <= 0) return;
+              // Set seek position directly — no React state involved
+              audio.currentTime = (val / 100) * dur;
+            }}
             className="flex-1 cursor-pointer disabled:opacity-40"
             style={{
               height: "6px",
@@ -190,7 +209,7 @@ export function BottomPlayer() {
               outline: "none",
               appearance: "none",
               WebkitAppearance: "none",
-              background: `linear-gradient(to right, rgb(220 38 38) ${displayPct}%, oklch(0.3 0 0) ${displayPct}%)`,
+              background: "oklch(0.3 0 0)",
             }}
           />
           <span className="text-xs text-muted-foreground w-8">

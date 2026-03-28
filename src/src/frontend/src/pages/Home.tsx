@@ -1,5 +1,6 @@
 import { Play, TrendingUp } from "lucide-react";
 import { motion } from "motion/react";
+import { useEffect } from "react";
 import type { Song } from "../backend";
 import { SongCard } from "../components/SongCard";
 import { usePlayer } from "../context/PlayerContext";
@@ -8,9 +9,15 @@ import { useGetAllSongs } from "../hooks/useQueries";
 
 export function Home() {
   const { data: songs = [], isLoading } = useGetAllSongs();
-  const { playSong, currentSong, isPlaying } = usePlayer();
+  const { playSong, currentSong, isPlaying, setSongQueue } = usePlayer();
 
   const hasRealSongs = songs.length > 0;
+
+  useEffect(() => {
+    if (songs.length > 0) {
+      setSongQueue(songs);
+    }
+  }, [songs, setSongQueue]);
 
   return (
     <div className="space-y-8">
@@ -104,7 +111,15 @@ export function Home() {
                     {i + 1}
                   </span>
                   <Play className="w-4 h-4 text-primary hidden group-hover:block flex-shrink-0" />
-                  <div className="w-10 h-10 rounded bg-gradient-to-br from-primary/20 to-accent/20 flex-shrink-0" />
+                  <div className="w-10 h-10 rounded bg-gradient-to-br from-primary/20 to-accent/20 flex-shrink-0 overflow-hidden">
+                    {song.coverPhotoUrl && (
+                      <img
+                        src={song.coverPhotoUrl}
+                        alt={song.title}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{song.title}</p>
                     <p className="text-xs text-muted-foreground truncate">
