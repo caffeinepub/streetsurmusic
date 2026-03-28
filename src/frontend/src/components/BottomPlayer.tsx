@@ -50,6 +50,8 @@ export function BottomPlayer() {
   const rangeRef = useRef<HTMLInputElement>(null);
   const timeDisplayRef = useRef<HTMLSpanElement>(null);
   const isDraggingRef = useRef(false);
+  // Store the pct value captured during drag so onPointerUp always has correct value
+  const dragPctRef = useRef(0);
 
   // Sync slider + time display from playback — only when NOT dragging
   useEffect(() => {
@@ -178,12 +180,15 @@ export function BottomPlayer() {
             step={0.1}
             defaultValue={0}
             disabled={!activeSong}
-            onPointerDown={() => {
+            onPointerDown={(e) => {
               isDraggingRef.current = true;
+              // Capture initial value at drag start
+              dragPctRef.current = Number((e.target as HTMLInputElement).value);
             }}
-            onInput={(e) => {
-              // Update gradient + time display while dragging — pure DOM, no React state
-              const val = Number((e.target as HTMLInputElement).value);
+            onChange={(e) => {
+              // onChange fires reliably on every value change during drag
+              const val = Number(e.target.value);
+              dragPctRef.current = val;
               setRangeGradient(e.target as HTMLInputElement, val);
               if (timeDisplayRef.current && audioRef.current) {
                 const dur = audioRef.current.duration || duration;
@@ -192,15 +197,15 @@ export function BottomPlayer() {
                 );
               }
             }}
-            onPointerUp={(e) => {
+            onPointerUp={() => {
               isDraggingRef.current = false;
-              const val = Number(e.currentTarget.value);
+              // Use dragPctRef -- always has the correct last dragged value
+              const pct = dragPctRef.current;
               const audio = audioRef.current;
               if (!audio) return;
               const dur = audio.duration;
               if (!dur || !Number.isFinite(dur) || dur <= 0) return;
-              // Set seek position directly — no React state involved
-              audio.currentTime = (val / 100) * dur;
+              audio.currentTime = (pct / 100) * dur;
             }}
             className="flex-1 cursor-pointer disabled:opacity-40"
             style={{
