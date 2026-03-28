@@ -45,7 +45,7 @@ export const SAMPLE_SONGS: SampleSong[] = [
     artist: "DJ Ravi",
     cover: "/assets/generated/cover-street-beats.dim_300x300.jpg",
     duration: "3:58",
-    genre: "Hip-Hop",
+    genre: "Hip Hop",
     year: 2025,
   },
   {

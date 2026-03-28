@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Compass, Home, User } from "lucide-react";
+import { Compass, Home, Upload, User } from "lucide-react";
 import { motion } from "motion/react";
 import { type Page, useNavigation } from "../context/NavigationContext";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -13,6 +13,7 @@ const NAV_ITEMS: {
   { label: "Home", icon: Home, page: "home" },
   { label: "Explore", icon: Compass, page: "explore" },
   { label: "Profile", icon: User, page: "profile", requiresAuth: true },
+  { label: "Upload", icon: Upload, page: "upload", requiresAuth: true },
 ];
 
 export function Sidebar() {

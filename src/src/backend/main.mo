@@ -43,8 +43,8 @@ actor {
 
   // User profile management functions
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can access profiles");
+    if (Principal.isAnonymous(caller)) {
+      Runtime.trap("Unauthorized: Must be logged in");
     };
     userProfiles.get(caller);
   };
@@ -57,16 +57,16 @@ actor {
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
+    if (Principal.isAnonymous(caller)) {
+      Runtime.trap("Unauthorized: Must be logged in");
     };
     userProfiles.add(caller, profile);
   };
 
   // Song management functions
   public shared ({ caller }) func uploadSong(metadata : { title : Text; artist : Text }, blobReference : Storage.ExternalBlob) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can upload songs");
+    if (Principal.isAnonymous(caller)) {
+      Runtime.trap("Unauthorized: Must be logged in to upload songs");
     };
     let songId = nextSongId;
     nextSongId += 1;

@@ -27,6 +27,7 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Song } from "../backend";
 import { usePlayer } from "../context/PlayerContext";
+import { useFollowedArtists } from "../hooks/useFollowedArtists";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import type { LocalPlaylist } from "../hooks/useLocalProfile";
 import { useLocalProfile } from "../hooks/useLocalProfile";
@@ -58,6 +59,8 @@ export function Profile() {
     editPlaylist,
     deletePlaylist,
   } = useLocalProfile();
+
+  const { followedArtists } = useFollowedArtists();
 
   // Edit profile dialog
   const [editOpen, setEditOpen] = useState(false);
@@ -225,7 +228,7 @@ export function Profile() {
               <div className="w-px h-4 bg-border" />
               <div className="flex items-center gap-1.5 text-sm">
                 <Users className="w-4 h-4 text-primary" />
-                <span className="font-semibold">{localProfile.following}</span>
+                <span className="font-semibold">{followedArtists.length}</span>
                 <span className="text-muted-foreground">Following</span>
               </div>
               <div className="w-px h-4 bg-border" />

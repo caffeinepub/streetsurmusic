@@ -9,9 +9,14 @@ import { useGetAllSongs } from "../hooks/useQueries";
 
 export function Home() {
   const { data: songs = [], isLoading } = useGetAllSongs();
-  const { playSong, currentSong, isPlaying } = usePlayer();
+  const { playSongFromList, playStaticSongFromList, currentSong, isPlaying } =
+    usePlayer();
 
   const hasRealSongs = songs.length > 0;
+  const featuredSongs = hasRealSongs ? (songs as Song[]).slice(0, 5) : [];
+  const recentSongs = hasRealSongs ? (songs as Song[]).slice(0, 6) : [];
+  const sampleFeatured = SAMPLE_SONGS.slice(0, 5);
+  const sampleRecent = SAMPLE_SONGS;
 
   return (
     <div className="space-y-8">
@@ -26,13 +31,9 @@ export function Home() {
           alt="streetsurmusic"
           className="absolute inset-0 w-full h-full object-cover"
         />
-        {/* Strong red gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-primary/40 via-black/70 to-black" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-
-        {/* Red glow orb */}
         <div className="absolute -left-12 top-1/2 -translate-y-1/2 w-64 h-64 bg-primary/30 rounded-full blur-[80px] pointer-events-none" />
-
         <div className="relative z-10 h-full flex flex-col justify-center px-8 md:px-12">
           <p className="text-primary text-xs font-bold uppercase tracking-[0.2em] mb-3">
             India Ka Music
@@ -70,20 +71,25 @@ export function Home() {
           </div>
         ) : hasRealSongs ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {songs.slice(0, 5).map((song: Song, i: number) => (
+            {featuredSongs.map((song: Song, i: number) => (
               <SongCard
                 key={song.id.toString()}
                 song={song}
                 isPlaying={isPlaying && currentSong?.id === song.id}
-                onPlay={playSong}
+                onPlay={() => playSongFromList(featuredSongs, i)}
                 index={i}
               />
             ))}
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-            {SAMPLE_SONGS.slice(0, 5).map((s, i) => (
-              <SongCard key={s.id} sampleSong={s} index={i} />
+            {sampleFeatured.map((s, i) => (
+              <SongCard
+                key={s.id}
+                sampleSong={s}
+                onPlay={() => playStaticSongFromList(sampleFeatured, i)}
+                index={i}
+              />
             ))}
           </div>
         )}
@@ -98,16 +104,14 @@ export function Home() {
           </h2>
         </div>
         <div className="space-y-2">
-          {(hasRealSongs ? songs.slice(0, 6) : SAMPLE_SONGS).map((item, i) => {
-            if ("id" in item && typeof item.id === "bigint") {
-              const song = item as Song;
-              return (
+          {hasRealSongs
+            ? recentSongs.map((song: Song, i: number) => (
                 <motion.div
                   key={song.id.toString()}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  onClick={() => playSong(song)}
+                  onClick={() => playSongFromList(recentSongs, i)}
                   data-ocid={`home.recent.item.${i + 1}`}
                   className="flex items-center gap-3 p-3 rounded-lg bg-card hover:bg-secondary cursor-pointer transition-colors group border border-transparent hover:border-primary/10"
                 >
@@ -132,37 +136,35 @@ export function Home() {
                     className="opacity-0 group-hover:opacity-100"
                   />
                 </motion.div>
-              );
-            }
-            const s = item as (typeof SAMPLE_SONGS)[0];
-            return (
-              <motion.div
-                key={s.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                data-ocid={`home.recent.item.${i + 1}`}
-                className="flex items-center gap-3 p-3 rounded-lg bg-card hover:bg-secondary cursor-pointer transition-colors group border border-transparent hover:border-primary/10"
-              >
-                <span className="text-muted-foreground text-sm w-5 text-center group-hover:hidden">
-                  {i + 1}
-                </span>
-                <Play className="w-4 h-4 text-primary hidden group-hover:block flex-shrink-0" />
-                <img
-                  src={s.cover}
-                  alt={s.title}
-                  className="w-10 h-10 rounded object-cover flex-shrink-0"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{s.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {s.artist}
-                  </p>
-                </div>
-                <p className="text-xs text-muted-foreground">{s.duration}</p>
-              </motion.div>
-            );
-          })}
+              ))
+            : sampleRecent.map((s, i) => (
+                <motion.div
+                  key={s.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: i * 0.05 }}
+                  onClick={() => playStaticSongFromList(sampleRecent, i)}
+                  data-ocid={`home.recent.item.${i + 1}`}
+                  className="flex items-center gap-3 p-3 rounded-lg bg-card hover:bg-secondary cursor-pointer transition-colors group border border-transparent hover:border-primary/10"
+                >
+                  <span className="text-muted-foreground text-sm w-5 text-center group-hover:hidden">
+                    {i + 1}
+                  </span>
+                  <Play className="w-4 h-4 text-primary hidden group-hover:block flex-shrink-0" />
+                  <img
+                    src={s.cover}
+                    alt={s.title}
+                    className="w-10 h-10 rounded object-cover flex-shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{s.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {s.artist}
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{s.duration}</p>
+                </motion.div>
+              ))}
         </div>
       </section>
     </div>

@@ -1,6 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { Music, Pause, Play, Volume2, VolumeX } from "lucide-react";
+import {
+  Music,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { usePlayer } from "../context/PlayerContext";
 
@@ -17,6 +25,10 @@ export function BottomPlayer() {
     currentStaticSong,
     isPlaying,
     togglePlay,
+    nextSong,
+    prevSong,
+    hasNext,
+    hasPrev,
     progress,
     duration,
     volume,
@@ -68,20 +80,40 @@ export function BottomPlayer() {
 
       {/* Controls */}
       <div className="flex-1 flex flex-col items-center gap-1">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={togglePlay}
-          disabled={!activeSong}
-          data-ocid="player.toggle"
-          className="w-9 h-9 rounded-full bg-primary hover:bg-primary/90 text-white disabled:opacity-40"
-        >
-          {isPlaying ? (
-            <Pause className="w-4 h-4" />
-          ) : (
-            <Play className="w-4 h-4 translate-x-0.5" />
-          )}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={prevSong}
+            disabled={!activeSong || !hasPrev}
+            className="w-8 h-8 rounded-full text-muted-foreground hover:text-foreground disabled:opacity-30"
+          >
+            <SkipBack className="w-4 h-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={togglePlay}
+            disabled={!activeSong}
+            data-ocid="player.toggle"
+            className="w-9 h-9 rounded-full bg-primary hover:bg-primary/90 text-white disabled:opacity-40"
+          >
+            {isPlaying ? (
+              <Pause className="w-4 h-4" />
+            ) : (
+              <Play className="w-4 h-4 translate-x-0.5" />
+            )}
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={nextSong}
+            disabled={!activeSong || !hasNext}
+            className="w-8 h-8 rounded-full text-muted-foreground hover:text-foreground disabled:opacity-30"
+          >
+            <SkipForward className="w-4 h-4" />
+          </Button>
+        </div>
         <div className="w-full max-w-md flex items-center gap-2">
           <span className="text-xs text-muted-foreground w-8 text-right">
             {formatTime(progress)}

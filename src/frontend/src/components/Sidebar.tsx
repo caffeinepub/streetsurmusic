@@ -3,24 +3,16 @@ import { Compass, Home, Upload, User } from "lucide-react";
 import { motion } from "motion/react";
 import { type Page, useNavigation } from "../context/NavigationContext";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import { useOwner } from "../hooks/useOwner";
 
 const NAV_ITEMS: {
   label: string;
   icon: React.ElementType;
   page: Page;
   requiresAuth?: boolean;
-  ownerOnly?: boolean;
 }[] = [
   { label: "Home", icon: Home, page: "home" },
   { label: "Explore", icon: Compass, page: "explore" },
-  {
-    label: "Upload",
-    icon: Upload,
-    page: "upload",
-    requiresAuth: true,
-    ownerOnly: true,
-  },
+  { label: "Upload", icon: Upload, page: "upload", requiresAuth: true },
   { label: "Profile", icon: User, page: "profile", requiresAuth: true },
 ];
 
@@ -28,15 +20,10 @@ export function Sidebar() {
   const { page, navigate } = useNavigation();
   const { identity } = useInternetIdentity();
   const isLoggedIn = !!identity;
-  const principalStr = identity?.getPrincipal().toString();
-  const { isOwner } = useOwner(principalStr);
 
   return (
     <aside className="fixed left-0 top-16 bottom-20 w-16 md:w-56 bg-sidebar border-r border-sidebar-border flex flex-col py-4 gap-1 z-40">
-      {NAV_ITEMS.filter((item) => {
-        if (item.ownerOnly && !isOwner) return false;
-        return true;
-      }).map((item) => {
+      {NAV_ITEMS.map((item) => {
         const Icon = item.icon;
         const isActive = page === item.page;
         const isDisabled = item.requiresAuth && !isLoggedIn;

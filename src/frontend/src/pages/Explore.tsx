@@ -13,15 +13,17 @@ import { usePlayer } from "../context/PlayerContext";
 import { SAMPLE_SONGS } from "../data/sampleSongs";
 import { useGetAllSongs } from "../hooks/useQueries";
 
-const GENRES = [
+export const GENRES = [
   "Pop",
   "Rock",
-  "Hip-Hop",
+  "Hip Hop",
   "R&B",
   "Electronic",
-  "Jazz",
+  "Jazz & Blues",
   "Classical",
   "Bollywood",
+  "Folk & Country",
+  "Reggae & Latin",
   "Indie",
   "Other",
 ];
@@ -29,21 +31,24 @@ const YEARS = [2026, 2025, 2024, 2023, 2022, 2021, 2020];
 
 export function Explore() {
   const { data: songs = [], isLoading } = useGetAllSongs();
-  const { playSong, currentSong, isPlaying } = usePlayer();
+  const { playSongFromList, playStaticSongFromList, currentSong, isPlaying } =
+    usePlayer();
   const hasRealSongs = songs.length > 0;
 
   const [selectedGenre, setSelectedGenre] = useState<string>("all");
   const [selectedYear, setSelectedYear] = useState<string>("all");
 
-  // Filter sample songs client-side
   const filteredSamples = SAMPLE_SONGS.filter((s) => {
     const genreMatch = selectedGenre === "all" || s.genre === selectedGenre;
     const yearMatch = selectedYear === "all" || s.year === Number(selectedYear);
     return genreMatch && yearMatch;
   });
 
-  // For real songs: filter by year from uploadedAt if available
-  const filteredReal = songs.filter((song: Song) => {
+  const filteredReal = (songs as Song[]).filter((song) => {
+    const genreMatch =
+      selectedGenre === "all" ||
+      song.genre.toLowerCase() === selectedGenre.toLowerCase();
+    if (!genreMatch) return false;
     if (selectedYear === "all") return true;
     const year = new Date(Number(song.uploadedAt / BigInt(1e6))).getFullYear();
     return year === Number(selectedYear);
@@ -54,7 +59,6 @@ export function Explore() {
 
   return (
     <div data-ocid="explore.section">
-      {/* Header */}
       <div className="flex items-center gap-2 mb-5">
         <Compass className="w-5 h-5 text-primary" />
         <h2 className="font-display text-xl font-bold tracking-tight">
@@ -65,17 +69,14 @@ export function Explore() {
         </span>
       </div>
 
-      {/* Filter Bar */}
       <div className="flex flex-wrap items-center gap-3 mb-6 p-3 bg-card border border-border rounded-xl">
         <div className="flex items-center gap-1.5 text-muted-foreground text-sm">
           <Filter className="w-4 h-4" />
           <span>Filter:</span>
         </div>
-
-        {/* Genre Select */}
         <Select value={selectedGenre} onValueChange={setSelectedGenre}>
           <SelectTrigger
-            className="w-[150px] h-8 text-sm bg-background border-border"
+            className="w-[160px] h-8 text-sm bg-background border-border"
             data-ocid="explore.select"
           >
             <SelectValue placeholder="All Genres" />
@@ -89,8 +90,6 @@ export function Explore() {
             ))}
           </SelectContent>
         </Select>
-
-        {/* Year Select */}
         <Select value={selectedYear} onValueChange={setSelectedYear}>
           <SelectTrigger
             className="w-[130px] h-8 text-sm bg-background border-border"
@@ -107,8 +106,6 @@ export function Explore() {
             ))}
           </SelectContent>
         </Select>
-
-        {/* Active filter badges */}
         {(selectedGenre !== "all" || selectedYear !== "all") && (
           <button
             type="button"
@@ -150,12 +147,12 @@ export function Explore() {
         </div>
       ) : hasRealSongs ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {(filteredReal as Song[]).map((song, i) => (
+          {filteredReal.map((song, i) => (
             <SongCard
               key={song.id.toString()}
               song={song}
               isPlaying={isPlaying && currentSong?.id === song.id}
-              onPlay={playSong}
+              onPlay={() => playSongFromList(filteredReal, i)}
               index={i}
             />
           ))}
@@ -163,7 +160,12 @@ export function Explore() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {filteredSamples.map((s, i) => (
-            <SongCard key={s.id} sampleSong={s} index={i} />
+            <SongCard
+              key={s.id}
+              sampleSong={s}
+              onPlay={() => playStaticSongFromList(filteredSamples, i)}
+              index={i}
+            />
           ))}
         </div>
       )}

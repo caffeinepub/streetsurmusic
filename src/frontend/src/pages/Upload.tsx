@@ -1,27 +1,22 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle, Lock, Music, Upload as UploadIcon } from "lucide-react";
-import { Loader2 } from "lucide-react";
+import {
+  CheckCircle,
+  Loader2,
+  Lock,
+  Music,
+  ShieldCheck,
+  Upload as UploadIcon,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
-import { useOwner } from "../hooks/useOwner";
 import { useUploadSong } from "../hooks/useQueries";
+import { GENRES } from "./Explore";
 
-const GENRES = [
-  "Pop",
-  "Hip Hop",
-  "Rock",
-  "Electronic",
-  "Jazz & Blues",
-  "Classical",
-  "Folk & Country",
-  "R&B",
-  "Bollywood",
-  "Reggae & Latin",
-];
+const OWNER_KEY = "streetsur_owner_principal";
 
 function detectGenre(title: string, artist: string): string {
   const text = `${title} ${artist}`.toLowerCase();
@@ -42,8 +37,10 @@ function detectGenre(title: string, artist: string): string {
 
 export function Upload() {
   const { identity } = useInternetIdentity();
-  const principalStr = identity?.getPrincipal().toString();
-  const { isOwner, hasOwner, claimOwnership } = useOwner(principalStr);
+  const myPrincipal = identity?.getPrincipal().toString();
+  const storedOwner = localStorage.getItem(OWNER_KEY);
+  const isOwner = !!storedOwner && storedOwner === myPrincipal;
+  const ownerExists = !!storedOwner;
 
   const [title, setTitle] = useState("");
   const [artist, setArtist] = useState("");
@@ -52,6 +49,7 @@ export function Upload() {
   const [file, setFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [claiming, setClaiming] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     mutateAsync: uploadSong,
@@ -95,6 +93,17 @@ export function Upload() {
     }
   };
 
+  const handleClaim = () => {
+    if (!myPrincipal) return;
+    setClaiming(true);
+    setTimeout(() => {
+      localStorage.setItem(OWNER_KEY, myPrincipal);
+      setClaiming(false);
+      toast.success("Ownership claimed! Ab sirf aap upload kar sakte hain.");
+      window.location.reload();
+    }, 800);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !artist.trim() || !file) {
@@ -117,8 +126,13 @@ export function Upload() {
       setAutoDetected(false);
       setFile(null);
       setUploadProgress(0);
-    } catch {
-      toast.error("Upload failed. Please try again.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(
+        msg.includes("Unauthorized")
+          ? "Login karein phir dobara try karein"
+          : "Upload failed. Please try again.",
+      );
     }
   };
 
@@ -132,51 +146,52 @@ export function Upload() {
     setUploadProgress(0);
   };
 
-  // Ownership gate
-  if (!hasOwner) {
+  // Owner already claimed by someone else
+  if (ownerExists && !isOwner) {
     return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="max-w-md mx-auto text-center py-16 space-y-5"
+      <div
+        className="max-w-md mx-auto text-center py-20"
         data-ocid="upload.section"
       >
-        <UploadIcon className="w-14 h-14 text-primary mx-auto" />
-        <h2 className="text-2xl font-bold">Claim Site Ownership</h2>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Koi bhi site owner nahi hai abhi. Apne aap ko owner set karein taaki
-          aap songs upload kar sakein.
+        <Lock className="w-14 h-14 text-muted-foreground mx-auto mb-4 opacity-50" />
+        <h2 className="text-xl font-bold mb-2">Upload Restricted</h2>
+        <p className="text-muted-foreground text-sm">
+          Upload sirf site ke owner ke liye available hai.
         </p>
-        {principalStr ? (
-          <Button
-            onClick={() => claimOwnership(principalStr)}
-            data-ocid="upload.primary_button"
-            className="bg-primary hover:bg-primary/90 text-white"
-          >
-            Claim Ownership
-          </Button>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            Pehle login karein, phir ownership claim karein.
-          </p>
-        )}
-      </motion.div>
+      </div>
     );
   }
 
-  if (hasOwner && !isOwner) {
+  // No owner claimed yet -- show claim button
+  if (!ownerExists) {
     return (
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="max-w-md mx-auto text-center py-16 space-y-5"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-md mx-auto text-center py-20"
         data-ocid="upload.section"
       >
-        <Lock className="w-14 h-14 text-destructive mx-auto" />
-        <h2 className="text-2xl font-bold">Access Denied</h2>
-        <p className="text-muted-foreground text-sm">
-          Sirf site owner songs upload kar sakta hai.
+        <ShieldCheck className="w-14 h-14 text-primary mx-auto mb-4" />
+        <h2 className="text-xl font-bold mb-2">Claim Ownership</h2>
+        <p className="text-muted-foreground text-sm mb-6">
+          Pehli baar setup: "Claim Ownership" click karo taaki sirf aap upload
+          kar sako.
         </p>
+        <Button
+          onClick={handleClaim}
+          disabled={claiming}
+          className="bg-primary hover:bg-primary/90 text-white"
+          data-ocid="upload.primary_button"
+        >
+          {claiming ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Claiming...
+            </>
+          ) : (
+            "Claim Ownership"
+          )}
+        </Button>
       </motion.div>
     );
   }
@@ -212,7 +227,6 @@ export function Upload() {
         <UploadIcon className="w-5 h-5 text-primary" />
         <h2 className="text-xl font-bold">Upload a Track</h2>
       </div>
-
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="song-title">Song Title</Label>
@@ -225,7 +239,6 @@ export function Upload() {
             className="bg-card border-border focus:border-primary/50"
           />
         </div>
-
         <div className="space-y-2">
           <Label htmlFor="artist-name">Artist Name</Label>
           <Input
@@ -237,7 +250,6 @@ export function Upload() {
             className="bg-card border-border focus:border-primary/50"
           />
         </div>
-
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Label htmlFor="song-genre">Genre</Label>
@@ -261,8 +273,6 @@ export function Upload() {
             ))}
           </select>
         </div>
-
-        {/* Dropzone */}
         <div className="space-y-2">
           <Label>Audio File</Label>
           <label
@@ -274,7 +284,7 @@ export function Upload() {
             onDragLeave={() => setIsDragOver(false)}
             onDrop={handleDrop}
             onKeyDown={handleDropzoneKeyDown}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors block ${
               isDragOver
                 ? "border-primary bg-primary/5"
                 : file
@@ -292,7 +302,9 @@ export function Upload() {
               }
             />
             <Music
-              className={`w-10 h-10 mx-auto mb-3 ${file ? "text-primary" : "text-muted-foreground"}`}
+              className={`w-10 h-10 mx-auto mb-3 ${
+                file ? "text-primary" : "text-muted-foreground"
+              }`}
             />
             {file ? (
               <>
@@ -313,7 +325,6 @@ export function Upload() {
             )}
           </label>
         </div>
-
         {isPending && uploadProgress > 0 && (
           <div className="space-y-1" data-ocid="upload.loading_state">
             <div className="flex justify-between text-xs text-muted-foreground">
@@ -328,7 +339,6 @@ export function Upload() {
             </div>
           </div>
         )}
-
         <Button
           type="submit"
           disabled={isPending || !title || !artist || !file}

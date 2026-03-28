@@ -17,6 +17,7 @@ import { Explore } from "./pages/Explore";
 import { Home } from "./pages/Home";
 import { Profile } from "./pages/Profile";
 import { SearchResults } from "./pages/SearchResults";
+import { Upload } from "./pages/Upload";
 
 function LoginPage() {
   const { login, isLoggingIn, isLoginError } = useInternetIdentity();
@@ -151,6 +152,8 @@ function AppContent() {
         return <Explore />;
       case "profile":
         return <Profile />;
+      case "upload":
+        return <Upload />;
       case "search":
         return <SearchResults />;
       default:
@@ -175,7 +178,10 @@ function AppContent() {
       <BottomPlayer />
 
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
-      <HelpModal open={helpOpen} onOpenChange={setHelpOpen} />
+      <HelpModal
+        open={helpOpen}
+        onOpenChange={(helpOpen) => setHelpOpen(helpOpen)}
+      />
       <AboutModal open={aboutOpen} onOpenChange={setAboutOpen} />
 
       <Toaster theme="dark" />

@@ -1,8 +1,8 @@
-import { Music, Pause, Play } from "lucide-react";
+import { Music, Pause, Play, UserCheck, UserPlus } from "lucide-react";
 import { motion } from "motion/react";
 import type { Song } from "../backend";
-import { usePlayer } from "../context/PlayerContext";
 import type { SampleSong } from "../data/sampleSongs";
+import { useFollowedArtists } from "../hooks/useFollowedArtists";
 
 type RealSongCardProps = {
   song: Song;
@@ -13,6 +13,7 @@ type RealSongCardProps = {
 
 type SampleSongCardProps = {
   sampleSong: SampleSong;
+  onPlay?: (song: SampleSong) => void;
   index?: number;
 };
 
@@ -23,10 +24,11 @@ function isRealSong(props: SongCardProps): props is RealSongCardProps {
 }
 
 export function SongCard(props: SongCardProps) {
-  const { playStaticSong } = usePlayer();
+  const { toggleFollow, isFollowing } = useFollowedArtists();
 
   if (isRealSong(props)) {
     const { song, isPlaying, onPlay, index = 0 } = props;
+    const following = isFollowing(song.artist);
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -56,12 +58,36 @@ export function SongCard(props: SongCardProps) {
         <p className="text-muted-foreground text-xs mt-0.5 truncate">
           {song.artist}
         </p>
+        <button
+          type="button"
+          data-ocid={`song.toggle.${index + 1}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleFollow(song.artist);
+          }}
+          className={`mt-2 flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors ${
+            following
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+          }`}
+        >
+          {following ? (
+            <>
+              <UserCheck className="w-3 h-3" /> Following
+            </>
+          ) : (
+            <>
+              <UserPlus className="w-3 h-3" /> Follow
+            </>
+          )}
+        </button>
       </motion.div>
     );
   }
 
-  const { sampleSong, index = 0 } = props;
+  const { sampleSong, onPlay, index = 0 } = props;
   const hasAudio = !!sampleSong.audioUrl;
+  const following = isFollowing(sampleSong.artist);
 
   return (
     <motion.div
@@ -70,7 +96,7 @@ export function SongCard(props: SongCardProps) {
       transition={{ delay: index * 0.05 }}
       className="group relative bg-card rounded-lg p-4 cursor-pointer hover:bg-secondary transition-all duration-200"
       data-ocid={`song.item.${index + 1}`}
-      onClick={() => hasAudio && playStaticSong(sampleSong)}
+      onClick={() => (onPlay ? onPlay(sampleSong) : undefined)}
     >
       <div className="relative mb-3 aspect-square rounded-md overflow-hidden bg-muted">
         <img
@@ -97,6 +123,29 @@ export function SongCard(props: SongCardProps) {
           {sampleSong.duration}
         </p>
       )}
+      <button
+        type="button"
+        data-ocid={`song.toggle.${index + 1}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleFollow(sampleSong.artist);
+        }}
+        className={`mt-2 flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors ${
+          following
+            ? "border-primary bg-primary/10 text-primary"
+            : "border-border text-muted-foreground hover:border-primary hover:text-primary"
+        }`}
+      >
+        {following ? (
+          <>
+            <UserCheck className="w-3 h-3" /> Following
+          </>
+        ) : (
+          <>
+            <UserPlus className="w-3 h-3" /> Follow
+          </>
+        )}
+      </button>
     </motion.div>
   );
 }
