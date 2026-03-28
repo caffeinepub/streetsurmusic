@@ -147,11 +147,21 @@ export function Upload() {
       setUploadProgress(0);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      toast.error(
-        msg.includes("Unauthorized")
-          ? "Login karein phir dobara try karein"
-          : "Upload failed. Please try again.",
-      );
+      console.error("Upload error:", msg);
+      if (
+        msg.toLowerCase().includes("unauthorized") ||
+        msg.includes("not registered")
+      ) {
+        toast.error(
+          "Login session expire ho gayi. Page refresh karein aur dobara login karein.",
+        );
+      } else if (msg.includes("Not connected") || msg.includes("actor")) {
+        toast.error(
+          "Connection issue. Page refresh karein aur dobara try karein.",
+        );
+      } else {
+        toast.error(`Upload failed: ${msg.slice(0, 120)}`);
+      }
     }
   };
 

@@ -48,30 +48,30 @@ actor {
 
   // User profile management functions
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can view profiles");
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Must be logged in");
     };
     userProfiles.get(caller);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can save profiles");
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Must be logged in");
     };
     userProfiles.add(caller, profile);
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
-    if (caller != user and not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Can only view your own profile");
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Must be logged in");
     };
     userProfiles.get(user);
   };
 
   // Song management functions
   public shared ({ caller }) func uploadSong(metadata : { title : Text; artist : Text }, blobReference : Storage.ExternalBlob, coverBlobReference : ?Storage.ExternalBlob) : async Nat {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can upload songs");
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Must be logged in to upload");
     };
     let songId = nextSongId;
     nextSongId += 1;

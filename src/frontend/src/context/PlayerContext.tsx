@@ -19,6 +19,7 @@ interface PlayerContextType {
   currentSong: Song | null;
   currentStaticSong: StaticSong | null;
   isPlaying: boolean;
+  isLoadingAudio: boolean;
   playSong: (song: Song) => void;
   playSongFromList: (songs: Song[], index: number) => void;
   playStaticSong: (song: SampleSong) => void;
@@ -48,6 +49,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     null,
   );
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [volume, setVolumeState] = useState(0.8);
@@ -55,7 +57,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
   const isSeekingRef = useRef(false);
-  const durationRef = useRef(0);
+
+  // Refs to avoid stale closure issues in the audio loading effect
+  const isPlayingRef = useRef(false);
+  const currentBlobUrlRef = useRef<string | null>(null);
+  // Track which song is currently loaded to avoid re-fetching on isPlaying change
+  const loadedSongKeyRef = useRef<string | null>(null);
 
   // Queue state
   const [songQueue, setSongQueue] = useState<Song[]>([]);
@@ -204,41 +211,113 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // seek uses a ref for duration to always have fresh value
   const seek = useCallback((pct: number) => {
     const audio = audioRef.current;
-    const dur = durationRef.current;
-    if (!audio || dur <= 0) return;
+    if (!audio) return;
+    const dur = audio.duration;
+    if (!dur || !Number.isFinite(dur) || dur <= 0) return;
     const newTime = pct * dur;
-    isSeekingRef.current = true;
+    // Set currentTime directly - works reliably with blob URLs
     audio.currentTime = newTime;
-    // Immediately update progress so UI doesn't flash back to 0
-    setProgress(newTime);
   }, []);
 
+  // Keep isPlayingRef in sync so async load callbacks can check it
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  // Main audio loading effect
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    let url: string | null = null;
+    // Compute a key for the current song to detect song changes vs isPlaying changes
+    let songKey: string | null = null;
     if (currentStaticSong) {
-      url = currentStaticSong.url;
+      songKey = `static:${currentStaticSong.url}`;
     } else if (currentSong) {
-      url = currentSong.blobReference.getDirectURL();
+      songKey = `backend:${String(currentSong.id)}`;
     }
 
-    if (!url) return;
+    const songChanged = loadedSongKeyRef.current !== songKey;
 
-    if (audio.src !== url) {
-      audio.src = url;
-      audio.load();
+    if (!songChanged) {
+      // Only isPlaying changed — just play or pause
+      if (isPlaying) {
+        audio.play().catch(() => setIsPlaying(false));
+      } else {
+        audio.pause();
+      }
+      return;
     }
 
-    if (isPlaying) {
-      audio.play().catch(() => setIsPlaying(false));
-    } else {
-      audio.pause();
-    }
+    // Song changed — need to load new audio
+    let cancelled = false;
+    loadedSongKeyRef.current = null; // mark as loading
+
+    const prevBlobUrl = currentBlobUrlRef.current;
+    currentBlobUrlRef.current = null;
+
+    const loadSong = async () => {
+      if (currentStaticSong) {
+        // Static songs: direct URL (should support range requests)
+        audio.src = currentStaticSong.url;
+        audio.load();
+        if (!cancelled) {
+          loadedSongKeyRef.current = songKey;
+          setIsLoadingAudio(false);
+          if (isPlayingRef.current) {
+            audio.play().catch(() => setIsPlaying(false));
+          }
+        }
+      } else if (currentSong) {
+        // Backend songs: fetch full audio as blob URL for reliable seeking
+        const directUrl = currentSong.blobReference.getDirectURL();
+        setIsLoadingAudio(true);
+        try {
+          const response = await fetch(directUrl);
+          if (cancelled) return;
+          const ab = await response.arrayBuffer();
+          if (cancelled) return;
+          const contentType =
+            response.headers.get("content-type") || "audio/mpeg";
+          const blobUrl = URL.createObjectURL(
+            new Blob([ab], { type: contentType }),
+          );
+          currentBlobUrlRef.current = blobUrl;
+          audio.src = blobUrl;
+          audio.load();
+          loadedSongKeyRef.current = songKey;
+          setIsLoadingAudio(false);
+          if (!cancelled && isPlayingRef.current) {
+            audio.play().catch(() => setIsPlaying(false));
+          }
+        } catch {
+          // Fallback to direct URL if fetch fails
+          if (!cancelled) {
+            audio.src = directUrl;
+            audio.load();
+            loadedSongKeyRef.current = songKey;
+            setIsLoadingAudio(false);
+            if (isPlayingRef.current) {
+              audio.play().catch(() => setIsPlaying(false));
+            }
+          }
+        }
+      }
+
+      // Revoke previous blob URL after new one is set
+      if (prevBlobUrl) {
+        URL.revokeObjectURL(prevBlobUrl);
+      }
+    };
+
+    loadSong();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSong, currentStaticSong, isPlaying]);
 
   useEffect(() => {
@@ -246,7 +325,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (!audio) return;
 
     const onTimeUpdate = () => {
-      // Don't overwrite progress while user is seeking
       if (!isSeekingRef.current) {
         setProgress(audio.currentTime);
       }
@@ -254,10 +332,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const onDurationChange = () => {
       const d = audio.duration || 0;
       setDuration(d);
-      durationRef.current = d;
     };
     const onSeeked = () => {
-      // Seeking is complete, allow timeupdate again
       isSeekingRef.current = false;
       setProgress(audio.currentTime);
     };
@@ -267,7 +343,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         audio.play().catch(() => setIsPlaying(false));
         return;
       }
-      // Auto-play next song if available
       if (songQueue.length > 0) {
         let newIndex: number;
         if (shuffle && songQueue.length > 1) {
@@ -346,6 +421,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         currentSong,
         currentStaticSong,
         isPlaying,
+        isLoadingAudio,
         playSong,
         playSongFromList,
         playStaticSong,

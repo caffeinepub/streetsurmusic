@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import {
+  Loader2,
   Music,
   Pause,
   Play,
@@ -31,6 +32,7 @@ export function BottomPlayer() {
     currentSong,
     currentStaticSong,
     isPlaying,
+    isLoadingAudio,
     togglePlay,
     nextSong,
     prevSong,
@@ -45,13 +47,13 @@ export function BottomPlayer() {
     toggleShuffle,
     toggleRepeat,
     audioRef,
+    seek,
   } = usePlayer();
 
   const rangeRef = useRef<HTMLInputElement>(null);
   const timeDisplayRef = useRef<HTMLSpanElement>(null);
   const isDraggingRef = useRef(false);
-  // Store the pct value captured during drag so onPointerUp always has correct value
-  const dragPctRef = useRef(0);
+  const dragValueRef = useRef<number | null>(null);
 
   // Sync slider + time display from playback — only when NOT dragging
   useEffect(() => {
@@ -72,6 +74,33 @@ export function BottomPlayer() {
       ? { title: currentStaticSong.title, artist: currentStaticSong.artist }
       : null;
 
+  function handleSeekStart() {
+    isDraggingRef.current = true;
+    dragValueRef.current = null;
+  }
+
+  function handleSeekChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = Number(e.target.value);
+    dragValueRef.current = val;
+    setRangeGradient(e.target as HTMLInputElement, val);
+    if (timeDisplayRef.current && audioRef.current) {
+      const dur = audioRef.current.duration || duration;
+      timeDisplayRef.current.textContent = formatTime((val / 100) * dur);
+    }
+  }
+
+  function handleSeekEnd() {
+    isDraggingRef.current = false;
+    // Use the value stored during drag — most reliable approach
+    const val = dragValueRef.current;
+    if (val !== null) {
+      seek(val / 100);
+    } else if (rangeRef.current) {
+      seek(Number(rangeRef.current.value) / 100);
+    }
+    dragValueRef.current = null;
+  }
+
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 h-20 bg-[oklch(0.11_0_0)] border-t border-border flex items-center px-4 gap-4">
       <AnimatePresence>
@@ -82,8 +111,12 @@ export function BottomPlayer() {
             animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-3 w-48 md:w-64 flex-shrink-0"
           >
-            <div className="w-10 h-10 rounded bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center flex-shrink-0">
-              <Music className="w-5 h-5 text-primary" />
+            <div className="w-10 h-10 rounded bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center flex-shrink-0 relative">
+              {isLoadingAudio ? (
+                <Loader2 className="w-5 h-5 text-primary animate-spin" />
+              ) : (
+                <Music className="w-5 h-5 text-primary" />
+              )}
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold truncate">
@@ -134,10 +167,12 @@ export function BottomPlayer() {
             size="icon"
             variant="ghost"
             onClick={togglePlay}
-            disabled={!activeSong}
+            disabled={!activeSong || isLoadingAudio}
             className="w-9 h-9 rounded-full bg-primary hover:bg-primary/90 text-white disabled:opacity-40"
           >
-            {isPlaying ? (
+            {isLoadingAudio ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : isPlaying ? (
               <Pause className="w-4 h-4" />
             ) : (
               <Play className="w-4 h-4 translate-x-0.5" />
@@ -179,34 +214,13 @@ export function BottomPlayer() {
             max={100}
             step={0.1}
             defaultValue={0}
-            disabled={!activeSong}
-            onPointerDown={(e) => {
-              isDraggingRef.current = true;
-              // Capture initial value at drag start
-              dragPctRef.current = Number((e.target as HTMLInputElement).value);
-            }}
-            onChange={(e) => {
-              // onChange fires reliably on every value change during drag
-              const val = Number(e.target.value);
-              dragPctRef.current = val;
-              setRangeGradient(e.target as HTMLInputElement, val);
-              if (timeDisplayRef.current && audioRef.current) {
-                const dur = audioRef.current.duration || duration;
-                timeDisplayRef.current.textContent = formatTime(
-                  (val / 100) * dur,
-                );
-              }
-            }}
-            onPointerUp={() => {
-              isDraggingRef.current = false;
-              // Use dragPctRef -- always has the correct last dragged value
-              const pct = dragPctRef.current;
-              const audio = audioRef.current;
-              if (!audio) return;
-              const dur = audio.duration;
-              if (!dur || !Number.isFinite(dur) || dur <= 0) return;
-              audio.currentTime = (pct / 100) * dur;
-            }}
+            disabled={!activeSong || isLoadingAudio}
+            onPointerDown={handleSeekStart}
+            onTouchStart={handleSeekStart}
+            onChange={handleSeekChange}
+            onPointerUp={handleSeekEnd}
+            onTouchEnd={handleSeekEnd}
+            onMouseUp={handleSeekEnd}
             className="flex-1 cursor-pointer disabled:opacity-40"
             style={{
               height: "6px",
