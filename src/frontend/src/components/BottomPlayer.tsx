@@ -216,11 +216,8 @@ export function BottomPlayer() {
             defaultValue={0}
             disabled={!activeSong || isLoadingAudio}
             onPointerDown={handleSeekStart}
-            onTouchStart={handleSeekStart}
             onChange={handleSeekChange}
             onPointerUp={handleSeekEnd}
-            onTouchEnd={handleSeekEnd}
-            onMouseUp={handleSeekEnd}
             className="flex-1 cursor-pointer disabled:opacity-40"
             style={{
               height: "6px",

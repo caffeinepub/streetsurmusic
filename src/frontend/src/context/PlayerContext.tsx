@@ -217,8 +217,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const dur = audio.duration;
     if (!dur || !Number.isFinite(dur) || dur <= 0) return;
     const newTime = pct * dur;
-    // Set currentTime directly - works reliably with blob URLs
+    // Pause -> seek -> play pattern for reliable seeking across all browsers
+    isSeekingRef.current = true;
+    const wasPlaying = !audio.paused;
+    if (wasPlaying) audio.pause();
     audio.currentTime = newTime;
+    if (wasPlaying) {
+      audio.play().catch(() => {
+        isSeekingRef.current = false;
+      });
+    }
   }, []);
 
   // Keep isPlayingRef in sync so async load callbacks can check it

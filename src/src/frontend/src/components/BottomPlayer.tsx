@@ -12,7 +12,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { usePlayer } from "../context/PlayerContext";
 
 function formatTime(s: number): string {
@@ -40,10 +40,13 @@ export function BottomPlayer() {
     toggleShuffle,
     toggleRepeat,
     songQueue,
+    audioRef,
   } = usePlayer();
 
-  const dragValueRef = useRef<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const seekInputRef = useRef<HTMLInputElement>(null);
+  const isDraggingRef = useRef(false);
+  const currentTimeDisplayRef = useRef<HTMLSpanElement>(null);
+  const durationRef = useRef<number>(0);
 
   const activeSong = currentSong
     ? { title: currentSong.title, artist: currentSong.artist }
@@ -51,15 +54,75 @@ export function BottomPlayer() {
       ? { title: currentStaticSong.title, artist: currentStaticSong.artist }
       : null;
 
-  const progressPct = duration ? (progress / duration) * 100 : 0;
-  const displayPct = isDragging
-    ? (dragValueRef.current ?? progressPct)
-    : progressPct;
-
   const hasQueue = songQueue.length > 1;
+
+  // Keep durationRef in sync
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
+
+  // Update seek bar and time display directly via DOM
+  useEffect(() => {
+    if (isDraggingRef.current) return;
+    const pct = duration ? (progress / duration) * 100 : 0;
+    if (seekInputRef.current) {
+      seekInputRef.current.value = String(pct);
+      // Update gradient track fill
+      seekInputRef.current.style.background = `linear-gradient(to right, var(--seek-fill) 0%, var(--seek-fill) ${pct}%, #444 ${pct}%, #444 100%)`;
+    }
+    if (currentTimeDisplayRef.current) {
+      currentTimeDisplayRef.current.textContent = formatTime(progress);
+    }
+  }, [progress, duration]);
+
+  const handleSeekPointerDown = () => {
+    isDraggingRef.current = true;
+  };
+
+  const handleSeekInput = (e: React.FormEvent<HTMLInputElement>) => {
+    const target = e.currentTarget;
+    const pct = Number(target.value) / 100;
+    const dur = durationRef.current;
+    // Update time display while dragging
+    if (currentTimeDisplayRef.current) {
+      currentTimeDisplayRef.current.textContent = formatTime(pct * dur);
+    }
+    // Update gradient
+    target.style.background = `linear-gradient(to right, var(--seek-fill) 0%, var(--seek-fill) ${Number(target.value)}%, #444 ${Number(target.value)}%, #444 100%)`;
+  };
+
+  const handleSeekPointerUp = (e: React.PointerEvent<HTMLInputElement>) => {
+    // Read value directly from DOM element at pointer release
+    const inputEl = e.currentTarget;
+    const val = Number(inputEl.value);
+    const pct = val / 100;
+    isDraggingRef.current = false;
+    // Set audio currentTime directly - bypass React state entirely
+    const audio = audioRef.current;
+    const dur = durationRef.current;
+    if (audio && dur) {
+      audio.currentTime = pct * dur;
+    } else {
+      seek(pct);
+    }
+  };
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 h-20 bg-[oklch(0.11_0_0)] border-t border-border flex items-center px-4 gap-4">
+      {/* CSS variable for seek fill color */}
+      <style>{`
+        :root { --seek-fill: oklch(0.6 0.22 25); }
+        input[type=range].seek-bar::-webkit-slider-thumb {
+          appearance: none; width: 12px; height: 12px; border-radius: 50%;
+          background: oklch(0.6 0.22 25); cursor: pointer;
+        }
+        input[type=range].seek-bar::-moz-range-thumb {
+          width: 12px; height: 12px; border-radius: 50%; border: none;
+          background: oklch(0.6 0.22 25); cursor: pointer;
+        }
+        input[type=range].seek-bar { -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; outline: none; cursor: pointer; background: #444; }
+        input[type=range].seek-bar:disabled { opacity: 0.4; cursor: default; }
+      `}</style>
       <AnimatePresence>
         {activeSong ? (
           <motion.div
@@ -165,30 +228,26 @@ export function BottomPlayer() {
           </button>
         </div>
         <div className="w-full max-w-md flex items-center gap-2">
-          <span className="text-xs text-muted-foreground w-8 text-right">
-            {formatTime(
-              isDragging && dragValueRef.current !== null
-                ? (dragValueRef.current / 100) * duration
-                : progress,
-            )}
+          <span
+            ref={currentTimeDisplayRef}
+            className="text-xs text-muted-foreground w-8 text-right"
+          >
+            {formatTime(progress)}
           </span>
-          <Slider
-            data-ocid="player.editor"
-            value={[displayPct]}
+          {/* Native range input - fully DOM-driven, no React controlled state */}
+          <input
+            ref={seekInputRef}
+            type="range"
             min={0}
             max={100}
             step={0.1}
-            onValueChange={([v]) => {
-              dragValueRef.current = v;
-              setIsDragging(true);
-            }}
-            onValueCommit={([v]) => {
-              seek(v / 100);
-              setIsDragging(false);
-              dragValueRef.current = null;
-            }}
+            defaultValue={0}
             disabled={!activeSong}
-            className="flex-1 [&_.bg-primary]:bg-primary"
+            onPointerDown={handleSeekPointerDown}
+            onInput={handleSeekInput}
+            onPointerUp={handleSeekPointerUp}
+            data-ocid="player.editor"
+            className="seek-bar flex-1"
           />
           <span className="text-xs text-muted-foreground w-8">
             {formatTime(duration)}
