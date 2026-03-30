@@ -56,7 +56,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
-  const isSeekingRef = useRef(false);
 
   // Refs to avoid stale closure issues in the audio loading effect
   const isPlayingRef = useRef(false);
@@ -211,22 +210,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // seek() is kept for API compatibility but BottomPlayer now seeks directly via audioRef
   const seek = useCallback((pct: number) => {
     const audio = audioRef.current;
     if (!audio) return;
     const dur = audio.duration;
     if (!dur || !Number.isFinite(dur) || dur <= 0) return;
-    const newTime = pct * dur;
-    // Pause -> seek -> play pattern for reliable seeking across all browsers
-    isSeekingRef.current = true;
-    const wasPlaying = !audio.paused;
-    if (wasPlaying) audio.pause();
-    audio.currentTime = newTime;
-    if (wasPlaying) {
-      audio.play().catch(() => {
-        isSeekingRef.current = false;
-      });
-    }
+    audio.currentTime = pct * dur;
   }, []);
 
   // Keep isPlayingRef in sync so async load callbacks can check it
@@ -268,7 +258,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     const loadSong = async () => {
       if (currentStaticSong) {
-        // Static songs: direct URL (should support range requests)
+        // Static songs: direct URL
         audio.src = currentStaticSong.url;
         audio.load();
         if (!cancelled) {
@@ -332,17 +322,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const audio = audioRef.current;
     if (!audio) return;
 
+    // Always update progress from actual audio.currentTime — no seeking guard needed
+    // BottomPlayer handles visual seek state independently via isDraggingRef
     const onTimeUpdate = () => {
-      if (!isSeekingRef.current) {
-        setProgress(audio.currentTime);
-      }
+      setProgress(audio.currentTime);
     };
     const onDurationChange = () => {
       const d = audio.duration || 0;
       setDuration(d);
     };
     const onSeeked = () => {
-      isSeekingRef.current = false;
       setProgress(audio.currentTime);
     };
     const onEnded = () => {

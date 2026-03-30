@@ -47,13 +47,78 @@ export function BottomPlayer() {
     toggleShuffle,
     toggleRepeat,
     audioRef,
-    seek,
   } = usePlayer();
 
   const rangeRef = useRef<HTMLInputElement>(null);
   const timeDisplayRef = useRef<HTMLSpanElement>(null);
   const isDraggingRef = useRef(false);
-  const dragValueRef = useRef<number | null>(null);
+  // Keep a stable ref to audioRef so native listeners always see the latest audio element
+  const audioRefStable = useRef(audioRef);
+  useEffect(() => {
+    audioRefStable.current = audioRef;
+  });
+
+  // Native DOM event listeners for the seek slider
+  useEffect(() => {
+    const el = rangeRef.current;
+    if (!el) return;
+
+    const onPointerDown = () => {
+      isDraggingRef.current = true;
+    };
+
+    // Update visual feedback while dragging
+    const onInput = (e: Event) => {
+      const val = Number((e.target as HTMLInputElement).value);
+      setRangeGradient(el, val);
+      const audio = audioRefStable.current.current;
+      if (timeDisplayRef.current && audio) {
+        const dur = audio.duration;
+        if (dur && Number.isFinite(dur) && dur > 0) {
+          timeDisplayRef.current.textContent = formatTime((val / 100) * dur);
+        }
+      }
+    };
+
+    // 'change' fires once when user releases slider — this is the commit event
+    const onChange = (e: Event) => {
+      const val = Number((e.target as HTMLInputElement).value);
+      const audio = audioRefStable.current.current;
+      if (audio) {
+        const dur = audio.duration;
+        if (dur && Number.isFinite(dur) && dur > 0) {
+          // Directly set currentTime — no context functions, no intermediate layers
+          audio.currentTime = (val / 100) * dur;
+          // Update gradient to match committed position
+          setRangeGradient(el, val);
+          if (timeDisplayRef.current) {
+            timeDisplayRef.current.textContent = formatTime((val / 100) * dur);
+          }
+        }
+      }
+      // Release drag lock after seek is committed
+      isDraggingRef.current = false;
+    };
+
+    // Fallback: if change didn't fire for some reason
+    const onPointerUp = () => {
+      isDraggingRef.current = false;
+    };
+
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("input", onInput);
+    el.addEventListener("change", onChange);
+    el.addEventListener("pointerup", onPointerUp);
+    el.addEventListener("pointercancel", onPointerUp);
+
+    return () => {
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("input", onInput);
+      el.removeEventListener("change", onChange);
+      el.removeEventListener("pointerup", onPointerUp);
+      el.removeEventListener("pointercancel", onPointerUp);
+    };
+  }, []);
 
   // Sync slider + time display from playback — only when NOT dragging
   useEffect(() => {
@@ -73,33 +138,6 @@ export function BottomPlayer() {
     : currentStaticSong
       ? { title: currentStaticSong.title, artist: currentStaticSong.artist }
       : null;
-
-  function handleSeekStart() {
-    isDraggingRef.current = true;
-    dragValueRef.current = null;
-  }
-
-  function handleSeekChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = Number(e.target.value);
-    dragValueRef.current = val;
-    setRangeGradient(e.target as HTMLInputElement, val);
-    if (timeDisplayRef.current && audioRef.current) {
-      const dur = audioRef.current.duration || duration;
-      timeDisplayRef.current.textContent = formatTime((val / 100) * dur);
-    }
-  }
-
-  function handleSeekEnd() {
-    isDraggingRef.current = false;
-    // Use the value stored during drag — most reliable approach
-    const val = dragValueRef.current;
-    if (val !== null) {
-      seek(val / 100);
-    } else if (rangeRef.current) {
-      seek(Number(rangeRef.current.value) / 100);
-    }
-    dragValueRef.current = null;
-  }
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 h-20 bg-[oklch(0.11_0_0)] border-t border-border flex items-center px-4 gap-4">
@@ -215,9 +253,6 @@ export function BottomPlayer() {
             step={0.1}
             defaultValue={0}
             disabled={!activeSong || isLoadingAudio}
-            onPointerDown={handleSeekStart}
-            onChange={handleSeekChange}
-            onPointerUp={handleSeekEnd}
             className="flex-1 cursor-pointer disabled:opacity-40"
             style={{
               height: "6px",
