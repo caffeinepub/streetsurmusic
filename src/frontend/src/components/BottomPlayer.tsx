@@ -51,12 +51,8 @@ export function BottomPlayer() {
   const rangeRef = useRef<HTMLInputElement>(null);
   const volRangeRef = useRef<HTMLInputElement>(null);
   const timeDisplayRef = useRef<HTMLSpanElement>(null);
+  // true while user is dragging — prevents timeupdate from resetting slider
   const isDraggingRef = useRef(false);
-  const dragValueRef = useRef(0);
-  const audioRefStable = useRef(audioRef);
-  useEffect(() => {
-    audioRefStable.current = audioRef;
-  });
 
   const [isAudioReady, setIsAudioReady] = useState(false);
   useEffect(() => {
@@ -76,20 +72,17 @@ export function BottomPlayer() {
   }, [audioRef]);
 
   // Native DOM event listeners for the seek slider
+  // - "input" fires continuously during drag → only update visuals
+  // - "change" fires ONCE on release → reliable final value → do the actual seek
   useEffect(() => {
     const el = rangeRef.current;
     if (!el) return;
 
-    const onPointerDown = () => {
+    const onInput = () => {
       isDraggingRef.current = true;
-      dragValueRef.current = Number(el.value);
-    };
-
-    const onInput = (e: Event) => {
-      const val = Number((e.target as HTMLInputElement).value);
-      dragValueRef.current = val;
+      const val = Number(el.value);
       setRangeGradient(el, val);
-      const audio = audioRefStable.current.current;
+      const audio = audioRef.current;
       if (timeDisplayRef.current && audio) {
         const dur = audio.duration;
         if (dur && Number.isFinite(dur) && dur > 0) {
@@ -98,10 +91,10 @@ export function BottomPlayer() {
       }
     };
 
-    const onPointerUp = () => {
-      if (!isDraggingRef.current) return;
-      const val = dragValueRef.current;
-      const audio = audioRefStable.current.current;
+    const onChange = () => {
+      // "change" fires once on mouse/touch release with the final slider value
+      const val = Number(el.value);
+      const audio = audioRef.current;
       if (audio) {
         const dur = audio.duration;
         if (dur && Number.isFinite(dur) && dur > 0) {
@@ -109,26 +102,17 @@ export function BottomPlayer() {
         }
       }
       setRangeGradient(el, val);
-      if (timeDisplayRef.current) {
-        const audio2 = audioRefStable.current.current;
-        const dur2 = audio2?.duration || 0;
-        timeDisplayRef.current.textContent = formatTime((val / 100) * dur2);
-      }
       isDraggingRef.current = false;
     };
 
-    el.addEventListener("pointerdown", onPointerDown);
     el.addEventListener("input", onInput);
-    el.addEventListener("pointerup", onPointerUp);
-    el.addEventListener("pointercancel", onPointerUp);
+    el.addEventListener("change", onChange);
 
     return () => {
-      el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("input", onInput);
-      el.removeEventListener("pointerup", onPointerUp);
-      el.removeEventListener("pointercancel", onPointerUp);
+      el.removeEventListener("change", onChange);
     };
-  }, []);
+  }, [audioRef]);
 
   // Sync seek slider + time display from playback — only when NOT dragging
   useEffect(() => {
