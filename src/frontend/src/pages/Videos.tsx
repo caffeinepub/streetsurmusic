@@ -1,4 +1,4 @@
-import { Loader2, Youtube } from "lucide-react";
+import { ExternalLink, Loader2, Youtube } from "lucide-react";
 import { useEffect, useState } from "react";
 
 interface VideoItem {
@@ -12,11 +12,13 @@ interface VideoItem {
 const CHANNEL_ID = "UCQBX2tMQ0YqBokJ6YDfKPzg";
 const RSS_URL = `https://www.youtube.com/feeds/videos.xml?channel_id=${CHANNEL_ID}`;
 
-// Multiple CORS proxies as fallbacks
-const PROXIES = [
+// rss2json converts RSS to JSON and has reliable CORS support
+const RSS2JSON_URL = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(RSS_URL)}`;
+
+// Fallback CORS proxies for raw XML
+const XML_PROXIES = [
   `https://api.allorigins.win/raw?url=${encodeURIComponent(RSS_URL)}`,
   `https://corsproxy.io/?${encodeURIComponent(RSS_URL)}`,
-  `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(RSS_URL)}`,
 ];
 
 function timeAgo(dateStr: string): string {
@@ -36,53 +38,84 @@ function timeAgo(dateStr: string): string {
   return `${years} year${years > 1 ? "s" : ""} ago`;
 }
 
-async function fetchWithFallback(): Promise<string> {
-  for (const proxyUrl of PROXIES) {
+function extractVideoId(url: string): string {
+  const match = url.match(/[?&]v=([^&]+)/) || url.match(/youtu\.be\/([^?]+)/);
+  return match ? match[1] : "";
+}
+
+// Try rss2json API first (JSON response, CORS friendly)
+async function fetchViaRss2Json(): Promise<VideoItem[]> {
+  const res = await fetch(RSS2JSON_URL, { signal: AbortSignal.timeout(10000) });
+  if (!res.ok) throw new Error("rss2json failed");
+  const data = await res.json();
+  if (data.status !== "ok" || !data.items) throw new Error("bad response");
+  return data.items
+    .map(
+      (item: {
+        link: string;
+        title: string;
+        thumbnail?: string;
+        pubDate: string;
+      }) => {
+        const videoId = extractVideoId(item.link);
+        return {
+          videoId,
+          title: item.title,
+          thumbnail:
+            item.thumbnail ||
+            (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ""),
+          url: item.link,
+          published: item.pubDate,
+        };
+      },
+    )
+    .filter((v: VideoItem) => v.videoId && v.title);
+}
+
+// Fallback: raw XML via CORS proxy
+async function fetchViaXmlProxy(): Promise<VideoItem[]> {
+  for (const proxyUrl of XML_PROXIES) {
     try {
       const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
-      if (res.ok) {
-        const text = await res.text();
-        // Validate it's actually XML with YouTube entries
-        if (text.includes("<entry>") || text.includes("yt:channel")) {
-          return text;
-        }
-      }
+      if (!res.ok) continue;
+      const text = await res.text();
+      if (!text.includes("<entry>") && !text.includes("yt:channel")) continue;
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, "text/xml");
+      const entries = Array.from(doc.querySelectorAll("entry"));
+      const videos = entries
+        .map((entry) => {
+          const videoId =
+            entry.getElementsByTagNameNS(
+              "http://www.youtube.com/xml/schemas/2015",
+              "videoId",
+            )[0]?.textContent ??
+            entry.querySelector("videoId")?.textContent ??
+            "";
+          const title = entry.querySelector("title")?.textContent ?? "";
+          const thumbnail =
+            entry
+              .getElementsByTagNameNS(
+                "http://search.yahoo.com/mrss/",
+                "thumbnail",
+              )[0]
+              ?.getAttribute("url") ??
+            (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : "");
+          const url =
+            entry
+              .querySelector('link[rel="alternate"]')
+              ?.getAttribute("href") ??
+            (videoId ? `https://www.youtube.com/watch?v=${videoId}` : "");
+          const published = entry.querySelector("published")?.textContent ?? "";
+          return { videoId, title, thumbnail, url, published };
+        })
+        .filter((v) => v.videoId && v.title);
+      if (videos.length > 0) return videos;
     } catch {
-      // Try next proxy
+      // try next
     }
   }
   throw new Error("All proxies failed");
-}
-
-function parseVideos(xmlText: string): VideoItem[] {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xmlText, "text/xml");
-  const entries = Array.from(doc.querySelectorAll("entry"));
-  return entries
-    .map((entry) => {
-      const videoId =
-        entry.getElementsByTagNameNS(
-          "http://www.youtube.com/xml/schemas/2015",
-          "videoId",
-        )[0]?.textContent ??
-        entry.querySelector("videoId")?.textContent ??
-        "";
-      const title = entry.querySelector("title")?.textContent ?? "";
-      const thumbnail =
-        entry
-          .getElementsByTagNameNS(
-            "http://search.yahoo.com/mrss/",
-            "thumbnail",
-          )[0]
-          ?.getAttribute("url") ??
-        (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : "");
-      const url =
-        entry.querySelector('link[rel="alternate"]')?.getAttribute("href") ??
-        (videoId ? `https://www.youtube.com/watch?v=${videoId}` : "");
-      const published = entry.querySelector("published")?.textContent ?? "";
-      return { videoId, title, thumbnail, url, published };
-    })
-    .filter((v) => v.videoId && v.title);
 }
 
 export function Videos() {
@@ -94,10 +127,15 @@ export function Videos() {
     let cancelled = false;
     async function fetchVideos() {
       try {
-        const xmlText = await fetchWithFallback();
+        // Try rss2json first, then fallback to XML proxies
+        let result: VideoItem[];
+        try {
+          result = await fetchViaRss2Json();
+        } catch {
+          result = await fetchViaXmlProxy();
+        }
         if (!cancelled) {
-          const parsed = parseVideos(xmlText);
-          setVideos(parsed);
+          setVideos(result);
           setLoading(false);
         }
       } catch {
@@ -179,6 +217,15 @@ export function Videos() {
           <p className="text-muted-foreground text-sm">
             Abhi koi video nahi hai. Subscribe karo update ke liye!
           </p>
+          <a
+            href="https://www.youtube.com/@streetsurmusic"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition-colors"
+          >
+            <Youtube className="w-4 h-4" />
+            YouTube Channel Dekho
+          </a>
         </div>
       )}
 
@@ -198,13 +245,18 @@ export function Videos() {
               className="group bg-card border border-border rounded-lg overflow-hidden cursor-pointer transition-transform duration-200 hover:scale-[1.02] hover:shadow-xl hover:shadow-black/30 hover:border-primary/30 block"
             >
               {/* Thumbnail */}
-              <div className="aspect-video overflow-hidden bg-muted">
+              <div className="aspect-video overflow-hidden bg-muted relative">
                 <img
                   src={video.thumbnail}
                   alt={video.title}
                   className="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-90"
                   loading="lazy"
                 />
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="bg-black/60 rounded-full p-3">
+                    <ExternalLink className="w-5 h-5 text-white" />
+                  </div>
+                </div>
               </div>
               {/* Info */}
               <div className="p-3 space-y-1">

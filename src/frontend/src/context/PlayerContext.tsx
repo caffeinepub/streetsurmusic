@@ -57,13 +57,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(false);
 
-  // Refs to avoid stale closure issues in the audio loading effect
   const isPlayingRef = useRef(false);
   const currentBlobUrlRef = useRef<string | null>(null);
-  // Track which song is currently loaded to avoid re-fetching on isPlaying change
   const loadedSongKeyRef = useRef<string | null>(null);
 
-  // Queue state
   const [songQueue, setSongQueue] = useState<Song[]>([]);
   const [songQueueIndex, setSongQueueIndex] = useState(-1);
   const [staticQueue, setStaticQueue] = useState<SampleSong[]>([]);
@@ -120,10 +117,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     (songs: SampleSong[], index: number) => {
       setSongQueue([]);
       setSongQueueIndex(-1);
+      // Find the first playable song if the selected one has no audio
+      let startIndex = index;
+      if (!songs[index]?.audioUrl) {
+        const next = songs.findIndex((s, i) => i > index && s.audioUrl);
+        const prev = songs
+          .slice(0, index)
+          .reverse()
+          .findIndex((s) => s.audioUrl);
+        if (next !== -1) startIndex = next;
+        else if (prev !== -1) startIndex = index - 1 - prev;
+        else return; // no playable songs
+      }
       setStaticQueue(songs);
-      setStaticQueueIndex(index);
+      setStaticQueueIndex(startIndex);
       setCurrentSong(null);
-      const s = songs[index];
+      const s = songs[startIndex];
       if (s.audioUrl) {
         setCurrentStaticSong({
           title: s.title,
@@ -160,8 +169,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         if (staticQueueIndex >= staticQueue.length - 1) return;
         newIndex = staticQueueIndex + 1;
       }
-      setStaticQueueIndex(newIndex);
-      const s = staticQueue[newIndex];
+      // Skip songs with no audio
+      const candidates = staticQueue.slice(newIndex).filter((s) => s.audioUrl);
+      if (candidates.length === 0) return;
+      const actualIndex = staticQueue.indexOf(candidates[0]);
+      setStaticQueueIndex(actualIndex);
+      const s = staticQueue[actualIndex];
       if (s.audioUrl) {
         setCurrentStaticSong({
           title: s.title,
@@ -180,7 +193,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setCurrentSong(songQueue[newIndex]);
       setIsPlaying(true);
     } else if (staticQueue.length > 0 && staticQueueIndex > 0) {
-      const newIndex = staticQueueIndex - 1;
+      // Find previous song with audio
+      const prevCandidates = staticQueue
+        .slice(0, staticQueueIndex)
+        .reverse()
+        .filter((s) => s.audioUrl);
+      if (prevCandidates.length === 0) {
+        if (audioRef.current) audioRef.current.currentTime = 0;
+        return;
+      }
+      const newIndex = staticQueue.lastIndexOf(prevCandidates[0]);
       setStaticQueueIndex(newIndex);
       const s = staticQueue[newIndex];
       if (s.audioUrl) {
@@ -192,7 +214,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }
       setIsPlaying(true);
     } else {
-      // Restart current song
       if (audioRef.current) {
         audioRef.current.currentTime = 0;
       }
@@ -210,7 +231,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // seek() is kept for API compatibility but BottomPlayer now seeks directly via audioRef
   const seek = useCallback((pct: number) => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -219,17 +239,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     audio.currentTime = pct * dur;
   }, []);
 
-  // Keep isPlayingRef in sync so async load callbacks can check it
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
-  // Main audio loading effect
+  // Main audio loading effect — ALWAYS load audio as blob URL for reliable seeking
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    // Compute a key for the current song to detect song changes vs isPlaying changes
     let songKey: string | null = null;
     if (currentStaticSong) {
       songKey = `static:${currentStaticSong.url}`;
@@ -240,7 +258,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const songChanged = loadedSongKeyRef.current !== songKey;
 
     if (!songChanged) {
-      // Only isPlaying changed — just play or pause
       if (isPlaying) {
         audio.play().catch(() => setIsPlaying(false));
       } else {
@@ -249,31 +266,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Song changed — need to load new audio
     let cancelled = false;
-    loadedSongKeyRef.current = null; // mark as loading
+    loadedSongKeyRef.current = null;
 
     const prevBlobUrl = currentBlobUrlRef.current;
     currentBlobUrlRef.current = null;
 
     const loadSong = async () => {
-      if (currentStaticSong) {
-        // Static songs: direct URL
-        audio.src = currentStaticSong.url;
-        audio.load();
-        if (!cancelled) {
-          loadedSongKeyRef.current = songKey;
-          setIsLoadingAudio(false);
-          if (isPlayingRef.current) {
-            audio.play().catch(() => setIsPlaying(false));
-          }
-        }
-      } else if (currentSong) {
-        // Backend songs: fetch full audio as blob URL for reliable seeking
-        const directUrl = currentSong.blobReference.getDirectURL();
+      if (currentStaticSong || currentSong) {
+        // ALWAYS fetch as blob URL — this ensures seeking always works
+        // because all audio data is in memory (no HTTP range requests needed)
+        const url = currentStaticSong
+          ? currentStaticSong.url
+          : currentSong!.blobReference.getDirectURL();
+
         setIsLoadingAudio(true);
         try {
-          const response = await fetch(directUrl);
+          const response = await fetch(url);
           if (cancelled) return;
           const ab = await response.arrayBuffer();
           if (cancelled) return;
@@ -293,6 +302,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         } catch {
           // Fallback to direct URL if fetch fails
           if (!cancelled) {
+            const directUrl = currentStaticSong
+              ? currentStaticSong.url
+              : currentSong!.blobReference.getDirectURL();
             audio.src = directUrl;
             audio.load();
             loadedSongKeyRef.current = songKey;
@@ -304,7 +316,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Revoke previous blob URL after new one is set
       if (prevBlobUrl) {
         URL.revokeObjectURL(prevBlobUrl);
       }
@@ -322,8 +333,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const audio = audioRef.current;
     if (!audio) return;
 
-    // Always update progress from actual audio.currentTime — no seeking guard needed
-    // BottomPlayer handles visual seek state independently via isDraggingRef
     const onTimeUpdate = () => {
       setProgress(audio.currentTime);
     };
@@ -441,7 +450,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {/* biome-ignore lint/a11y/useMediaCaption: music streaming app, captions not applicable */}
-      <audio ref={audioRef} preload="metadata" />
+      <audio ref={audioRef} preload="auto" />
       {children}
     </PlayerContext.Provider>
   );

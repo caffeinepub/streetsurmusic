@@ -41,10 +41,25 @@ actor {
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
 
-  // Storage
-  var nextSongId = 0;
-  let songs = Map.empty<Nat, Song>();
-  let userProfiles = Map.empty<Principal, UserProfile>();
+  // Stable storage for songs (persists across upgrades/redeploys)
+  stable var nextSongId : Nat = 0;
+  stable var stableSongs : [(Nat, Song)] = [];
+  stable var stableProfiles : [(Principal, UserProfile)] = [];
+
+  // In-memory maps rebuilt from stable storage
+  let songs = Map.fromIter<Nat, Song>(stableSongs.vals());
+  let userProfiles = Map.fromIter<Principal, UserProfile>(stableProfiles.vals());
+
+  // Persist maps to stable storage before upgrades
+  system func preupgrade() {
+    stableSongs := songs.entries().toArray();
+    stableProfiles := userProfiles.entries().toArray();
+  };
+
+  system func postupgrade() {
+    stableSongs := [];
+    stableProfiles := [];
+  };
 
   // User profile management functions
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {

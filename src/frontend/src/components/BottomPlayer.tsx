@@ -22,8 +22,8 @@ function formatTime(s: number): string {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-function setRangeGradient(el: HTMLInputElement, pct: number) {
-  el.style.background = `linear-gradient(to right, rgb(220 38 38) ${pct}%, oklch(0.3 0 0) ${pct}%)`;
+function gradientStyle(pct: number) {
+  return `linear-gradient(to right, rgb(220 38 38) ${pct}%, oklch(0.3 0 0) ${pct}%)`;
 }
 
 export function BottomPlayer() {
@@ -47,116 +47,117 @@ export function BottomPlayer() {
     audioRef,
   } = usePlayer();
 
-  const rangeRef = useRef<HTMLInputElement>(null);
-  const volRangeRef = useRef<HTMLInputElement>(null);
-  const timeDisplayRef = useRef<HTMLSpanElement>(null);
-  // true while user is dragging — prevents timeupdate from moving slider
-  const isDraggingRef = useRef(false);
-
   const [isAudioReady, setIsAudioReady] = useState(false);
+  const [displayTime, setDisplayTime] = useState(0);
+  const [volSliderValue, setVolSliderValue] = useState(80);
+
+  // Refs for the seek input — we control it as uncontrolled DOM element
+  const seekInputRef = useRef<HTMLInputElement>(null);
+  const isDraggingRef = useRef(false);
+  const wasPlayingRef = useRef(false);
 
   // Track audio ready state
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
     const onCanPlay = () => setIsAudioReady(true);
-    const onLoadStart = () => setIsAudioReady(false);
-    const onEmptied = () => setIsAudioReady(false);
+    const onLoadStart = () => {
+      setIsAudioReady(false);
+      setDisplayTime(0);
+      // Reset seek input visually
+      if (seekInputRef.current) {
+        seekInputRef.current.value = "0";
+        seekInputRef.current.style.background = gradientStyle(0);
+      }
+    };
     audio.addEventListener("canplay", onCanPlay);
     audio.addEventListener("loadstart", onLoadStart);
-    audio.addEventListener("emptied", onEmptied);
     return () => {
       audio.removeEventListener("canplay", onCanPlay);
       audio.removeEventListener("loadstart", onLoadStart);
-      audio.removeEventListener("emptied", onEmptied);
     };
   }, [audioRef]);
 
-  // DIRECT DOM approach: bypass React state entirely for slider sync.
-  // Listen to timeupdate on the audio element directly and update DOM.
-  // This eliminates any React re-render timing issues.
+  // Sync seek input visually with audio playback (DOM-driven, no React state for slider)
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-
     const onTimeUpdate = () => {
-      // Do NOT update slider while user is dragging
       if (isDraggingRef.current) return;
       const dur = audio.duration;
       if (!dur || !Number.isFinite(dur) || dur <= 0) return;
       const pct = (audio.currentTime / dur) * 100;
-      if (rangeRef.current) {
-        rangeRef.current.value = String(pct);
-        setRangeGradient(rangeRef.current, pct);
-      }
-      if (timeDisplayRef.current) {
-        timeDisplayRef.current.textContent = formatTime(audio.currentTime);
+      setDisplayTime(audio.currentTime);
+      if (seekInputRef.current) {
+        seekInputRef.current.value = String(pct);
+        seekInputRef.current.style.background = gradientStyle(pct);
       }
     };
-
     audio.addEventListener("timeupdate", onTimeUpdate);
     return () => audio.removeEventListener("timeupdate", onTimeUpdate);
   }, [audioRef]);
 
-  // Slider drag + seek logic using native DOM events only
+  // Native DOM event listeners for seek — completely bypasses React synthetic events
   useEffect(() => {
-    const el = rangeRef.current;
-    const audio = audioRef.current;
-    if (!el || !audio) return;
+    const input = seekInputRef.current;
+    if (!input) return;
 
-    const onInput = () => {
-      // Mark as dragging to block timeupdate from overriding slider
+    const onMouseDown = () => {
       isDraggingRef.current = true;
-      const val = Number(el.value);
-      setRangeGradient(el, val);
-      // Show live time during drag
-      const dur = audio.duration;
-      if (timeDisplayRef.current && dur && Number.isFinite(dur) && dur > 0) {
-        timeDisplayRef.current.textContent = formatTime((val / 100) * dur);
-      }
+      wasPlayingRef.current = !audioRef.current?.paused;
+      audioRef.current?.pause();
+    };
+    const onTouchStart = () => {
+      isDraggingRef.current = true;
+      wasPlayingRef.current = !audioRef.current?.paused;
+      audioRef.current?.pause();
     };
 
-    const onChange = () => {
-      // This fires once on release with the final slider value
-      const val = Number(el.value);
-      const dur = audio.duration;
-      if (dur && Number.isFinite(dur) && dur > 0) {
-        audio.currentTime = (val / 100) * dur;
-      }
-      setRangeGradient(el, val);
-      // Release drag lock only after seek is confirmed
-      // (seeked event on audio will do this)
+    // Update visual gradient while dragging (no React state, pure DOM)
+    const onInput = () => {
+      const pct = Number(input.value);
+      input.style.background = gradientStyle(pct);
     };
 
-    const onSeeked = () => {
-      // Seek complete — release drag lock
+    // CRITICAL: listen on window so we catch mouseup even when dragged outside the slider
+    const doSeek = () => {
+      if (!isDraggingRef.current) return;
       isDraggingRef.current = false;
+      const audio = audioRef.current;
+      if (!audio) return;
+      const dur = audio.duration;
+      if (!dur || !Number.isFinite(dur) || dur <= 0) return;
+      const pct = Number(input.value);
+      const newTime = (pct / 100) * dur;
+      audio.currentTime = newTime;
+      setDisplayTime(newTime);
+      if (wasPlayingRef.current) {
+        audio.play().catch(() => {});
+      }
     };
 
-    el.addEventListener("input", onInput);
-    el.addEventListener("change", onChange);
-    audio.addEventListener("seeked", onSeeked);
+    input.addEventListener("mousedown", onMouseDown);
+    input.addEventListener("touchstart", onTouchStart, { passive: true });
+    input.addEventListener("input", onInput);
+    // Attach mouseup/touchend to window — catches release outside the slider
+    window.addEventListener("mouseup", doSeek);
+    window.addEventListener("touchend", doSeek);
 
     return () => {
-      el.removeEventListener("input", onInput);
-      el.removeEventListener("change", onChange);
-      audio.removeEventListener("seeked", onSeeked);
+      input.removeEventListener("mousedown", onMouseDown);
+      input.removeEventListener("touchstart", onTouchStart);
+      input.removeEventListener("input", onInput);
+      window.removeEventListener("mouseup", doSeek);
+      window.removeEventListener("touchend", doSeek);
     };
   }, [audioRef]);
 
-  // Sync volume range gradient when volume changes
-  useEffect(() => {
-    if (volRangeRef.current) {
-      setRangeGradient(volRangeRef.current, volume * 100);
-    }
-  }, [volume]);
-
-  // Initialize volume gradient on mount
-  useEffect(() => {
-    if (volRangeRef.current) {
-      setRangeGradient(volRangeRef.current, 80);
-    }
-  }, []);
+  // Volume slider
+  const handleVolChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = Number(e.target.value);
+    setVolSliderValue(val);
+    setVolume(val / 100);
+  };
 
   const activeSong = currentSong
     ? { title: currentSong.title, artist: currentSong.artist }
@@ -176,7 +177,7 @@ export function BottomPlayer() {
             animate={{ opacity: 1, x: 0 }}
             className="flex items-center gap-3 w-48 md:w-64 flex-shrink-0"
           >
-            <div className="w-10 h-10 rounded bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center flex-shrink-0 relative">
+            <div className="w-10 h-10 rounded bg-gradient-to-br from-primary/30 to-accent/30 flex items-center justify-center flex-shrink-0">
               {isLoadingAudio ? (
                 <Loader2 className="w-5 h-5 text-primary animate-spin" />
               ) : (
@@ -211,11 +212,7 @@ export function BottomPlayer() {
             size="icon"
             variant="ghost"
             onClick={toggleShuffle}
-            className={`w-8 h-8 rounded-full ${
-              shuffle
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            className={`w-8 h-8 rounded-full ${shuffle ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
           >
             <Shuffle className="w-4 h-4" />
           </Button>
@@ -256,30 +253,25 @@ export function BottomPlayer() {
             size="icon"
             variant="ghost"
             onClick={toggleRepeat}
-            className={`w-8 h-8 rounded-full ${
-              repeat
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            className={`w-8 h-8 rounded-full ${repeat ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
           >
             <Repeat className="w-4 h-4" />
           </Button>
         </div>
+
         <div className="w-full max-w-md flex items-center gap-2">
-          <span
-            ref={timeDisplayRef}
-            className="text-xs text-muted-foreground w-8 text-right"
-          >
-            0:00
+          <span className="text-xs text-muted-foreground w-8 text-right">
+            {formatTime(displayTime)}
           </span>
           <div className="flex-1 relative flex items-center">
-            {activeSong && !isLoadingAudio && !isAudioReady && (
+            {activeSong && isLoadingAudio && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <Loader2 className="w-3 h-3 text-primary animate-spin" />
               </div>
             )}
+            {/* Uncontrolled input — React does NOT manage value, DOM does */}
             <input
-              ref={rangeRef}
+              ref={seekInputRef}
               type="range"
               min={0}
               max={100}
@@ -293,7 +285,7 @@ export function BottomPlayer() {
                 outline: "none",
                 appearance: "none",
                 WebkitAppearance: "none",
-                background: "oklch(0.3 0 0)",
+                background: gradientStyle(0),
               }}
             />
           </div>
@@ -307,7 +299,10 @@ export function BottomPlayer() {
       <div className="hidden md:flex items-center gap-2 w-32 flex-shrink-0">
         <button
           type="button"
-          onClick={() => setVolume(volume > 0 ? 0 : 0.8)}
+          onClick={() => {
+            setVolume(volume > 0 ? 0 : 0.8);
+            setVolSliderValue(volume > 0 ? 0 : 80);
+          }}
           className="text-muted-foreground hover:text-foreground transition-colors"
         >
           {volume === 0 ? (
@@ -317,13 +312,12 @@ export function BottomPlayer() {
           )}
         </button>
         <input
-          ref={volRangeRef}
           type="range"
           min={0}
           max={100}
           step={1}
-          defaultValue={80}
-          onChange={(e) => setVolume(Number(e.target.value) / 100)}
+          value={volSliderValue}
+          onChange={handleVolChange}
           className="w-full cursor-pointer flex-1"
           style={{
             height: "6px",
@@ -331,7 +325,7 @@ export function BottomPlayer() {
             outline: "none",
             appearance: "none",
             WebkitAppearance: "none",
-            background: "oklch(0.3 0 0)",
+            background: gradientStyle(volSliderValue),
           }}
         />
       </div>
