@@ -37,7 +37,6 @@ export function BottomPlayer() {
     prevSong,
     hasNext,
     hasPrev,
-    progress,
     duration,
     volume,
     setVolume,
@@ -51,10 +50,12 @@ export function BottomPlayer() {
   const rangeRef = useRef<HTMLInputElement>(null);
   const volRangeRef = useRef<HTMLInputElement>(null);
   const timeDisplayRef = useRef<HTMLSpanElement>(null);
-  // true while user is dragging — prevents timeupdate from resetting slider
+  // true while user is dragging — prevents timeupdate from moving slider
   const isDraggingRef = useRef(false);
 
   const [isAudioReady, setIsAudioReady] = useState(false);
+
+  // Track audio ready state
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -71,61 +72,77 @@ export function BottomPlayer() {
     };
   }, [audioRef]);
 
-  // Native DOM event listeners for the seek slider
-  // - "input" fires continuously during drag → only update visuals
-  // - "change" fires ONCE on release → reliable final value → do the actual seek
+  // DIRECT DOM approach: bypass React state entirely for slider sync.
+  // Listen to timeupdate on the audio element directly and update DOM.
+  // This eliminates any React re-render timing issues.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onTimeUpdate = () => {
+      // Do NOT update slider while user is dragging
+      if (isDraggingRef.current) return;
+      const dur = audio.duration;
+      if (!dur || !Number.isFinite(dur) || dur <= 0) return;
+      const pct = (audio.currentTime / dur) * 100;
+      if (rangeRef.current) {
+        rangeRef.current.value = String(pct);
+        setRangeGradient(rangeRef.current, pct);
+      }
+      if (timeDisplayRef.current) {
+        timeDisplayRef.current.textContent = formatTime(audio.currentTime);
+      }
+    };
+
+    audio.addEventListener("timeupdate", onTimeUpdate);
+    return () => audio.removeEventListener("timeupdate", onTimeUpdate);
+  }, [audioRef]);
+
+  // Slider drag + seek logic using native DOM events only
   useEffect(() => {
     const el = rangeRef.current;
-    if (!el) return;
+    const audio = audioRef.current;
+    if (!el || !audio) return;
 
     const onInput = () => {
+      // Mark as dragging to block timeupdate from overriding slider
       isDraggingRef.current = true;
       const val = Number(el.value);
       setRangeGradient(el, val);
-      const audio = audioRef.current;
-      if (timeDisplayRef.current && audio) {
-        const dur = audio.duration;
-        if (dur && Number.isFinite(dur) && dur > 0) {
-          timeDisplayRef.current.textContent = formatTime((val / 100) * dur);
-        }
+      // Show live time during drag
+      const dur = audio.duration;
+      if (timeDisplayRef.current && dur && Number.isFinite(dur) && dur > 0) {
+        timeDisplayRef.current.textContent = formatTime((val / 100) * dur);
       }
     };
 
     const onChange = () => {
-      // "change" fires once on mouse/touch release with the final slider value
+      // This fires once on release with the final slider value
       const val = Number(el.value);
-      const audio = audioRef.current;
-      if (audio) {
-        const dur = audio.duration;
-        if (dur && Number.isFinite(dur) && dur > 0) {
-          audio.currentTime = (val / 100) * dur;
-        }
+      const dur = audio.duration;
+      if (dur && Number.isFinite(dur) && dur > 0) {
+        audio.currentTime = (val / 100) * dur;
       }
       setRangeGradient(el, val);
+      // Release drag lock only after seek is confirmed
+      // (seeked event on audio will do this)
+    };
+
+    const onSeeked = () => {
+      // Seek complete — release drag lock
       isDraggingRef.current = false;
     };
 
     el.addEventListener("input", onInput);
     el.addEventListener("change", onChange);
+    audio.addEventListener("seeked", onSeeked);
 
     return () => {
       el.removeEventListener("input", onInput);
       el.removeEventListener("change", onChange);
+      audio.removeEventListener("seeked", onSeeked);
     };
   }, [audioRef]);
-
-  // Sync seek slider + time display from playback — only when NOT dragging
-  useEffect(() => {
-    if (isDraggingRef.current) return;
-    const pct = duration > 0 ? (progress / duration) * 100 : 0;
-    if (rangeRef.current) {
-      rangeRef.current.value = String(pct);
-      setRangeGradient(rangeRef.current, pct);
-    }
-    if (timeDisplayRef.current) {
-      timeDisplayRef.current.textContent = formatTime(progress);
-    }
-  }, [progress, duration]);
 
   // Sync volume range gradient when volume changes
   useEffect(() => {
