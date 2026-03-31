@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import {
   Loader2,
   Music,
@@ -50,16 +49,15 @@ export function BottomPlayer() {
   } = usePlayer();
 
   const rangeRef = useRef<HTMLInputElement>(null);
+  const volRangeRef = useRef<HTMLInputElement>(null);
   const timeDisplayRef = useRef<HTMLSpanElement>(null);
   const isDraggingRef = useRef(false);
-  const dragValueRef = useRef(0); // tracks the latest drag position
-  // Keep a stable ref to audioRef so native listeners always see the latest audio element
+  const dragValueRef = useRef(0);
   const audioRefStable = useRef(audioRef);
   useEffect(() => {
     audioRefStable.current = audioRef;
   });
 
-  // Track whether the audio element is ready to accept seek operations
   const [isAudioReady, setIsAudioReady] = useState(false);
   useEffect(() => {
     const audio = audioRef.current;
@@ -84,14 +82,11 @@ export function BottomPlayer() {
 
     const onPointerDown = () => {
       isDraggingRef.current = true;
-      // Capture current slider value as starting drag value
       dragValueRef.current = Number(el.value);
     };
 
-    // Update visual feedback while dragging — also store drag value in ref
     const onInput = (e: Event) => {
       const val = Number((e.target as HTMLInputElement).value);
-      // Always store the latest drag position in ref
       dragValueRef.current = val;
       setRangeGradient(el, val);
       const audio = audioRefStable.current.current;
@@ -103,11 +98,6 @@ export function BottomPlayer() {
       }
     };
 
-    // Perform the actual seek on pointer release.
-    // CRITICAL: We use dragValueRef.current (stored during input events) instead of
-    // e.target.value, because between pointerup and this handler firing, React may
-    // re-render and overwrite the DOM input value via the sync effect below —
-    // causing e.target.value (or el.value) to be 0 instead of the drag position.
     const onPointerUp = () => {
       if (!isDraggingRef.current) return;
       const val = dragValueRef.current;
@@ -124,8 +114,6 @@ export function BottomPlayer() {
         const dur2 = audio2?.duration || 0;
         timeDisplayRef.current.textContent = formatTime((val / 100) * dur2);
       }
-      // IMPORTANT: set isDragging to false AFTER the seek so the sync effect
-      // doesn't overwrite the slider position before our seek commits.
       isDraggingRef.current = false;
     };
 
@@ -142,7 +130,7 @@ export function BottomPlayer() {
     };
   }, []);
 
-  // Sync slider + time display from playback — only when NOT dragging
+  // Sync seek slider + time display from playback — only when NOT dragging
   useEffect(() => {
     if (isDraggingRef.current) return;
     const pct = duration > 0 ? (progress / duration) * 100 : 0;
@@ -155,13 +143,26 @@ export function BottomPlayer() {
     }
   }, [progress, duration]);
 
+  // Sync volume range gradient when volume changes
+  useEffect(() => {
+    if (volRangeRef.current) {
+      setRangeGradient(volRangeRef.current, volume * 100);
+    }
+  }, [volume]);
+
+  // Initialize volume gradient on mount
+  useEffect(() => {
+    if (volRangeRef.current) {
+      setRangeGradient(volRangeRef.current, 80);
+    }
+  }, []);
+
   const activeSong = currentSong
     ? { title: currentSong.title, artist: currentSong.artist }
     : currentStaticSong
       ? { title: currentStaticSong.title, artist: currentStaticSong.artist }
       : null;
 
-  // Seek bar should only be interactive when audio is truly ready
   const seekDisabled = !activeSong || isLoadingAudio || !isAudioReady;
 
   return (
@@ -314,13 +315,23 @@ export function BottomPlayer() {
             <Volume2 className="w-4 h-4" />
           )}
         </button>
-        <Slider
-          value={[volume * 100]}
+        <input
+          ref={volRangeRef}
+          type="range"
           min={0}
           max={100}
           step={1}
-          onValueChange={([v]) => setVolume(v / 100)}
-          className="flex-1"
+          defaultValue={80}
+          onChange={(e) => setVolume(Number(e.target.value) / 100)}
+          className="w-full cursor-pointer flex-1"
+          style={{
+            height: "6px",
+            borderRadius: "9999px",
+            outline: "none",
+            appearance: "none",
+            WebkitAppearance: "none",
+            background: "oklch(0.3 0 0)",
+          }}
         />
       </div>
     </footer>
