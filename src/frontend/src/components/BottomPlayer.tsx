@@ -13,7 +13,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePlayer } from "../context/PlayerContext";
 
 function formatTime(s: number): string {
@@ -52,11 +52,30 @@ export function BottomPlayer() {
   const rangeRef = useRef<HTMLInputElement>(null);
   const timeDisplayRef = useRef<HTMLSpanElement>(null);
   const isDraggingRef = useRef(false);
+  const dragValueRef = useRef(0); // tracks the latest drag position
   // Keep a stable ref to audioRef so native listeners always see the latest audio element
   const audioRefStable = useRef(audioRef);
   useEffect(() => {
     audioRefStable.current = audioRef;
   });
+
+  // Track whether the audio element is ready to accept seek operations
+  const [isAudioReady, setIsAudioReady] = useState(false);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onCanPlay = () => setIsAudioReady(true);
+    const onLoadStart = () => setIsAudioReady(false);
+    const onEmptied = () => setIsAudioReady(false);
+    audio.addEventListener("canplay", onCanPlay);
+    audio.addEventListener("loadstart", onLoadStart);
+    audio.addEventListener("emptied", onEmptied);
+    return () => {
+      audio.removeEventListener("canplay", onCanPlay);
+      audio.removeEventListener("loadstart", onLoadStart);
+      audio.removeEventListener("emptied", onEmptied);
+    };
+  }, [audioRef]);
 
   // Native DOM event listeners for the seek slider
   useEffect(() => {
@@ -65,11 +84,15 @@ export function BottomPlayer() {
 
     const onPointerDown = () => {
       isDraggingRef.current = true;
+      // Capture current slider value as starting drag value
+      dragValueRef.current = Number(el.value);
     };
 
-    // Update visual feedback while dragging
+    // Update visual feedback while dragging — also store drag value in ref
     const onInput = (e: Event) => {
       const val = Number((e.target as HTMLInputElement).value);
+      // Always store the latest drag position in ref
+      dragValueRef.current = val;
       setRangeGradient(el, val);
       const audio = audioRefStable.current.current;
       if (timeDisplayRef.current && audio) {
@@ -80,41 +103,40 @@ export function BottomPlayer() {
       }
     };
 
-    // 'change' fires once when user releases slider — this is the commit event
-    const onChange = (e: Event) => {
-      const val = Number((e.target as HTMLInputElement).value);
+    // Perform the actual seek on pointer release.
+    // CRITICAL: We use dragValueRef.current (stored during input events) instead of
+    // e.target.value, because between pointerup and this handler firing, React may
+    // re-render and overwrite the DOM input value via the sync effect below —
+    // causing e.target.value (or el.value) to be 0 instead of the drag position.
+    const onPointerUp = () => {
+      if (!isDraggingRef.current) return;
+      const val = dragValueRef.current;
       const audio = audioRefStable.current.current;
       if (audio) {
         const dur = audio.duration;
         if (dur && Number.isFinite(dur) && dur > 0) {
-          // Directly set currentTime — no context functions, no intermediate layers
           audio.currentTime = (val / 100) * dur;
-          // Update gradient to match committed position
-          setRangeGradient(el, val);
-          if (timeDisplayRef.current) {
-            timeDisplayRef.current.textContent = formatTime((val / 100) * dur);
-          }
         }
       }
-      // Release drag lock after seek is committed
-      isDraggingRef.current = false;
-    };
-
-    // Fallback: if change didn't fire for some reason
-    const onPointerUp = () => {
+      setRangeGradient(el, val);
+      if (timeDisplayRef.current) {
+        const audio2 = audioRefStable.current.current;
+        const dur2 = audio2?.duration || 0;
+        timeDisplayRef.current.textContent = formatTime((val / 100) * dur2);
+      }
+      // IMPORTANT: set isDragging to false AFTER the seek so the sync effect
+      // doesn't overwrite the slider position before our seek commits.
       isDraggingRef.current = false;
     };
 
     el.addEventListener("pointerdown", onPointerDown);
     el.addEventListener("input", onInput);
-    el.addEventListener("change", onChange);
     el.addEventListener("pointerup", onPointerUp);
     el.addEventListener("pointercancel", onPointerUp);
 
     return () => {
       el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("input", onInput);
-      el.removeEventListener("change", onChange);
       el.removeEventListener("pointerup", onPointerUp);
       el.removeEventListener("pointercancel", onPointerUp);
     };
@@ -138,6 +160,9 @@ export function BottomPlayer() {
     : currentStaticSong
       ? { title: currentStaticSong.title, artist: currentStaticSong.artist }
       : null;
+
+  // Seek bar should only be interactive when audio is truly ready
+  const seekDisabled = !activeSong || isLoadingAudio || !isAudioReady;
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-50 h-20 bg-[oklch(0.11_0_0)] border-t border-border flex items-center px-4 gap-4">
@@ -245,24 +270,31 @@ export function BottomPlayer() {
           >
             0:00
           </span>
-          <input
-            ref={rangeRef}
-            type="range"
-            min={0}
-            max={100}
-            step={0.1}
-            defaultValue={0}
-            disabled={!activeSong || isLoadingAudio}
-            className="flex-1 cursor-pointer disabled:opacity-40"
-            style={{
-              height: "6px",
-              borderRadius: "9999px",
-              outline: "none",
-              appearance: "none",
-              WebkitAppearance: "none",
-              background: "oklch(0.3 0 0)",
-            }}
-          />
+          <div className="flex-1 relative flex items-center">
+            {activeSong && !isLoadingAudio && !isAudioReady && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Loader2 className="w-3 h-3 text-primary animate-spin" />
+              </div>
+            )}
+            <input
+              ref={rangeRef}
+              type="range"
+              min={0}
+              max={100}
+              step={0.1}
+              defaultValue={0}
+              disabled={seekDisabled}
+              className="w-full cursor-pointer disabled:opacity-40"
+              style={{
+                height: "6px",
+                borderRadius: "9999px",
+                outline: "none",
+                appearance: "none",
+                WebkitAppearance: "none",
+                background: "oklch(0.3 0 0)",
+              }}
+            />
+          </div>
           <span className="text-xs text-muted-foreground w-8">
             {formatTime(duration)}
           </span>
