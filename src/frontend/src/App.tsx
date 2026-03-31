@@ -19,8 +19,9 @@ import { Home } from "./pages/Home";
 import { Profile } from "./pages/Profile";
 import { SearchResults } from "./pages/SearchResults";
 import { Upload } from "./pages/Upload";
+import { Videos } from "./pages/Videos";
 
-function LoginPage() {
+function LoginPage({ onWatchVideos }: { onWatchVideos: () => void }) {
   const { login, isLoggingIn, isLoginError } = useInternetIdentity();
   const [clicked, setClicked] = useState(false);
 
@@ -117,6 +118,15 @@ function LoginPage() {
           <p className="text-xs text-muted-foreground/60">
             Secure login via Internet Identity
           </p>
+
+          <button
+            type="button"
+            onClick={onWatchVideos}
+            data-ocid="login.videos.link"
+            className="text-sm text-muted-foreground/60 hover:text-primary transition-colors underline underline-offset-2"
+          >
+            Watch videos without login
+          </button>
         </div>
       </motion.div>
 
@@ -137,8 +147,8 @@ function LoginPage() {
 }
 
 function AppContent() {
-  const { page } = useNavigation();
-  const { identity, isInitializing } = useInternetIdentity();
+  const { page, navigate } = useNavigation();
+  const { identity, isInitializing, login } = useInternetIdentity();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
@@ -155,7 +165,48 @@ function AppContent() {
   }
 
   if (!identity) {
-    return <LoginPage />;
+    if (page === "videos") {
+      return (
+        <div className="min-h-screen bg-background">
+          {/* Minimal header for unauthenticated videos view */}
+          <header className="fixed top-0 left-0 right-0 h-16 bg-background/95 backdrop-blur border-b border-border flex items-center justify-between px-6 z-50">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                <span className="text-white font-extrabold text-sm">S</span>
+              </div>
+              <span className="font-extrabold text-lg">
+                <span className="text-primary">streetsur</span>
+                <span className="text-foreground">music</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => navigate("home")}
+                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              >
+                ← Back to Login
+              </button>
+              <button
+                type="button"
+                onClick={login}
+                data-ocid="videos.login.primary_button"
+                className="px-4 py-2 rounded-full text-sm font-semibold text-white bg-primary hover:bg-primary/90 transition-colors"
+              >
+                Login
+              </button>
+            </div>
+          </header>
+          <main className="pt-16 pb-8 min-h-screen">
+            <div className="p-4 md:p-6 max-w-7xl">
+              <Videos />
+            </div>
+          </main>
+          <Toaster theme="dark" />
+        </div>
+      );
+    }
+    return <LoginPage onWatchVideos={() => navigate("videos")} />;
   }
 
   const renderPage = () => {
@@ -170,6 +221,8 @@ function AppContent() {
         return <Upload />;
       case "search":
         return <SearchResults />;
+      case "videos":
+        return <Videos />;
       default:
         return <Home />;
     }

@@ -1,6 +1,12 @@
 import { createContext, useContext, useState } from "react";
 
-export type Page = "home" | "explore" | "upload" | "profile" | "search";
+export type Page =
+  | "home"
+  | "explore"
+  | "upload"
+  | "profile"
+  | "search"
+  | "videos";
 
 interface NavigationContextType {
   page: Page;

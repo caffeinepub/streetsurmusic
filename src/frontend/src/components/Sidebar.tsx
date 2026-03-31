@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Compass, Home, Upload, User } from "lucide-react";
+import { Compass, Home, Upload, User, Youtube } from "lucide-react";
 import { motion } from "motion/react";
 import { type Page, useNavigation } from "../context/NavigationContext";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
@@ -12,6 +12,7 @@ const NAV_ITEMS: {
 }[] = [
   { label: "Home", icon: Home, page: "home" },
   { label: "Explore", icon: Compass, page: "explore" },
+  { label: "Videos", icon: Youtube, page: "videos" },
   { label: "Upload", icon: Upload, page: "upload", requiresAuth: true },
   { label: "Profile", icon: User, page: "profile", requiresAuth: true },
 ];

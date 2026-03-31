@@ -11,6 +11,16 @@ export interface SampleSong {
 
 export const SAMPLE_SONGS: SampleSong[] = [
   {
+    id: "uploaded-2",
+    title: "Goalina Fire",
+    artist: "StreetSurMusic",
+    cover: "/assets/generated/cover-goalina-fire.dim_300x300.jpg",
+    duration: "",
+    genre: "Hip Hop",
+    year: 2026,
+    audioUrl: "/assets/sirf_shiv-019d300a-bad4-772f-90b0-be91f4d1367f.mp3",
+  },
+  {
     id: "uploaded-1",
     title: "Fanatic Blind Love Party",
     artist: "Fanatic",
